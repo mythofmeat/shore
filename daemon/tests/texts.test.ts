@@ -48,14 +48,21 @@ test("a text is Shore's wording until config points it at a file, which is read 
   await mkdir(join(dir, "mine"));
   await writeFile(join(dir, "mine", "time.md"), "[it is {{now}}]\n\n");
   const texts = new Texts({ time: "mine/time.md", status: false, wake_running: undefined }, dir);
-  expect([texts.whose("time"), texts.whose("status"), texts.whose("wake_running")]).toEqual(["yours", "off", "shore"]);
-  expect([texts.file("time"), texts.file("status"), texts.file("wake_running")]).toEqual([join(dir, "mine", "time.md"), undefined, undefined]);
   expect(texts.wording("time")).toBe("[it is {{now}}]\n");
   expect(texts.wording("status")).toBeUndefined();
   expect(texts.wording("wake_running")).toBe(required(TEXT_SPECS.get("wake_running")).shipped);
   await writeFile(join(dir, "mine", "time.md"), "changed\n");
   expect(texts.render("time", { now: "noon" })).toBe("[it is noon]\n");
   expect(Texts.of({ app: { texts: { time: "mine/time.md" } }, dirs: { config: dir } }).render("time")).toBe("changed");
+});
+
+test("texts sent elsewhere as their overrides alone come back with the same wording, switched off where they were", async () => {
+  const dir = await mkdtemp(testTmp("texts-overrides-"));
+  await writeFile(join(dir, "time.md"), "[at {{now}}]\n");
+  const overrides = new Texts({ time: "time.md", status: false }, dir).overrides(["time", "status", "wake_running"]);
+  expect(overrides).toEqual({ time: "[at {{now}}]", status: null });
+  const back = Texts.from(overrides);
+  expect([back.render("time", { now: "noon" }), back.render("status"), back.wording("wake_running")]).toEqual(["[at noon]", undefined, required(TEXT_SPECS.get("wake_running")).shipped]);
 });
 
 test("a text is given its values, a value left unset reads as empty, and a text that comes out blank is left out, or refused where Shore needs it", async () => {
@@ -76,7 +83,7 @@ test("a file of the user's that can't be read, or a name Shore has no text for, 
   expect(() => new Texts({ time: "gone.md" }, dir)).toThrow(`text "time" could not be read at ${join(dir, "gone.md")}: `);
   expect(() => new Texts({ nope: false }, dir)).toThrow('Shore has no text named "nope"');
   expect(() => new Texts().wording("nope")).toThrow('Shore has no text named "nope"');
-  expect(() => new Texts().whose("nope")).toThrow('Shore has no text named "nope"');
+  expect(() => Texts.from({ nope: null })).toThrow('Shore has no text named "nope"');
   expect(() => shippedText("nope")).toThrow('Shore has no text named "nope"');
   expect(shippedText("output_cut")).toBe("[process output truncated]");
 });

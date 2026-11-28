@@ -11,6 +11,7 @@ import { byteSize, MAX_THREAD_PIN_BYTES, MAX_THREAD_PINS_BYTES, threadFileText }
 import { linkedFile, namedFile, workspaceNames, type WorkspaceNames } from "./workspace_names.ts";
 import { WORKSPACE_LINK } from "./workspace_path.ts";
 import { defaultImagesConfig, imageSettingsFor, type ImagesConfig } from "../config/app.ts";
+import type { Texts } from "../texts/texts.ts";
 
 const MAX_READ_LINES = 2000;
 const MAX_READ_LINE_CHARS = 2000;
@@ -21,19 +22,11 @@ const FOLDER_INDEX = "INDEX.md";
 
 interface Located {
   path: string;
-  note?: string;
+  note?: string | undefined;
   folder?: string;
 }
 
 const resultBudget = (maxChars: number) => maxChars === 0 ? 50_000 : Math.max(1, maxChars - 512);
-
-function positiveInteger(input: Record<string, unknown>, name: string, fallback: number, maximum = Number.MAX_SAFE_INTEGER): number {
-  const value = input[name] === undefined ? fallback : input[name];
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1 || value > maximum) {
-    throw new InvalidArgs(`${name} must be an integer from 1 to ${maximum}`);
-  }
-  return value;
-}
 
 async function missing(path: string): Promise<boolean> {
   try {
@@ -57,7 +50,7 @@ async function withIndex(located: Located): Promise<Located> {
   return await isFile(index) ? { ...located, path: index, folder: located.path } : located;
 }
 
-async function locate(input: Record<string, unknown>, requested: string, workspaceDir: string, signal?: AbortSignal): Promise<Located> {
+async function locate(texts: Texts, input: Record<string, unknown>, requested: string, workspaceDir: string, signal?: AbortSignal): Promise<Located> {
   const value = String(input.file_path).trim();
   const link = WORKSPACE_LINK.exec(value);
   if (link !== null) {
@@ -74,12 +67,11 @@ async function locate(input: Record<string, unknown>, requested: string, workspa
   if (!looked || name === "" || name === ".." || name.startsWith(`..${sep}`)) return { path: requested };
   try {
     const found = await namedFile(await workspaceNames(workspaceDir, signal), name.split(sep), !folder);
-    const why = folder ? `is a folder; found ${found.link} by name. Read ${value}/ to list the folder` : `does not exist; found ${found.link} by name`;
-    return await withIndex({ path: found.path, note: `[${value} ${why}.]` });
+    return await withIndex({ path: found.path, note: texts.render(folder ? "read_found_folder" : "read_found", { asked: value, link: found.link }) });
   } catch (error) {
     signal?.throwIfAborted();
     if (folder) return { path: requested };
-    throw new ToolIoError(`${requested} does not exist; ${error instanceof Error ? error.message : String(error)}`);
+    throw new ToolIoError(texts.always("read_missing", { path: requested, why: error instanceof Error ? error.message : String(error) }));
   }
 }
 
@@ -143,25 +135,25 @@ function withNote(value: unknown, note: string | undefined): unknown {
   return carryToolMedia({ ...payload, notes: [note, ...(payload.notes ?? [])] });
 }
 
-async function withListing(page: TextPage, folder: string, workspaceDir: string, maxChars: number, signal?: AbortSignal): Promise<TextPage> {
-  const listing = await readFolder(folder, resultBudget(maxChars) - page.output.length - 2, signal);
-  return { ...page, output: `${page.output}\n\n${listing.cut ? `[Read ${relative(workspaceDir, folder)}/ to list the folder.]` : listing.text}` };
+async function withListing(texts: Texts, page: TextPage, folder: string, workspaceDir: string, maxChars: number, signal?: AbortSignal): Promise<TextPage> {
+  const listing = await readFolder(texts, folder, resultBudget(maxChars) - page.output.length - 2, signal);
+  const after = listing.cut ? texts.render("read_index_cut", { folder: relative(workspaceDir, folder) }) : listing.text;
+  return { ...page, output: after === undefined ? page.output : `${page.output}\n\n${after}` };
 }
 
 export async function handleRead(
-  input: Record<string, unknown>, workspaceDir: string, signal?: AbortSignal, maxChars = 50_000,
+  input: Record<string, unknown>, workspaceDir: string, texts: Texts, signal?: AbortSignal, maxChars = 50_000,
   maxImageBytes = DEFAULT_MAX_INLINE_IMAGE_BYTES, images: ImagesConfig = defaultImagesConfig(),
 ): Promise<unknown> {
   signal?.throwIfAborted();
   const requested = filePath(input, workspaceDir);
-  const offset = positiveInteger(input, "offset", 1);
-  const limit = positiveInteger(input, "limit", MAX_READ_LINES, MAX_READ_LINES);
-  const original = input.original ?? false;
-  if (typeof original !== "boolean") throw new InvalidArgs("original must be true or false");
-  const { path, note, folder } = await locate(input, requested, workspaceDir, signal);
+  const offset = (input.offset ?? 1) as number;
+  const limit = (input.limit ?? MAX_READ_LINES) as number;
+  const original = input.original === true;
+  const { path, note, folder } = await locate(texts, input, requested, workspaceDir, signal);
   if (await isFolder(path)) {
-    if (input.offset !== undefined || input.limit !== undefined || original) throw new InvalidArgs("offset, limit and original do not apply to folders");
-    return withNote((await readFolder(path, resultBudget(maxChars), signal)).text, note);
+    if (input.offset !== undefined || input.limit !== undefined || original) throw new InvalidArgs(texts.always("read_folder_options"));
+    return withNote((await readFolder(texts, path, resultBudget(maxChars), signal)).text, note);
   }
   const file = await openRegularFile(path);
   try {
@@ -171,24 +163,24 @@ export async function handleRead(
     const video = videoMime(sniffed);
     const mime = imageMime(sniffed) ?? video;
     if (mime !== undefined || IMAGE_EXTENSIONS.has(extname(path).toLowerCase())) {
-      if (mime === undefined) throw new ToolIoError(`${path}: invalid or unsupported image data`);
-      if (input.offset !== undefined || input.limit !== undefined) throw new InvalidArgs("offset and limit apply only to text files");
-      if (original && !images.read.allow_original) throw new InvalidArgs("original is turned off by images.read.allow_original; images are sent at the configured size");
-      const { description, image } = await (video === undefined ? readImage : readVideoFrame)(file, path, mime, signal);
+      if (mime === undefined) throw new ToolIoError(texts.always("read_image_data", { path }));
+      if (input.offset !== undefined || input.limit !== undefined) throw new InvalidArgs(texts.always("read_text_options"));
+      if (original && !images.read.allow_original) throw new InvalidArgs(texts.always("read_original_off"));
+      const { description, image } = await (video === undefined ? readImage : readVideoFrame)(texts, file, path, mime, signal);
       return withNote(carryToolMedia({ value: description, media: [original ? { ...image, original } : image], extra: [] }), note);
     }
-    if (original) throw new InvalidArgs("original applies only to image files");
-    const text = await readText(file, path, offset, limit, maxChars, signal);
-    const page = folder === undefined ? text : await withListing(text, folder, workspaceDir, maxChars, signal);
+    if (original) throw new InvalidArgs(texts.always("read_original_image"));
+    const text = await readText(texts, file, path, offset, limit, maxChars, signal);
+    const page = folder === undefined ? text : await withListing(texts, text, folder, workspaceDir, maxChars, signal);
     return withNote(MARKDOWN_EXTENSIONS.has(extname(path).toLowerCase())
-      ? await expandMarkdownImages(file, path, workspaceDir, page, maxImageBytes, imageSettingsFor(images, "read").max_bytes, signal)
+      ? await expandMarkdownImages(texts, file, path, workspaceDir, page, maxImageBytes, imageSettingsFor(images, "read").max_bytes, signal)
       : page.output, note);
   } finally {
     await file.close();
   }
 }
 
-async function readText(file: FileHandle, path: string, offset: number, limit: number, maxChars: number, signal?: AbortSignal): Promise<TextPage> {
+async function readText(texts: Texts, file: FileHandle, path: string, offset: number, limit: number, maxChars: number, signal?: AbortSignal): Promise<TextPage> {
   const decoder = new TextDecoder("utf-8", { fatal: true });
   const buffer = Buffer.alloc(32_768);
   const lines: string[] = [];
@@ -205,9 +197,10 @@ async function readText(file: FileHandle, path: string, offset: number, limit: n
   let more = false;
   const budget = resultBudget(maxChars);
   const lineLimit = Math.min(MAX_READ_LINE_CHARS, Math.max(1, budget - 80));
+  const lineCut = texts.render("read_line_cut", { chars: String(lineLimit) });
   const emit = (newline: boolean): boolean => {
     if (number < offset) return true;
-    const rendered = `${number}\t${line.replace(/\r$/, "")}${lineChars > lineLimit ? ` [line truncated after ${lineLimit} characters]` : ""}`;
+    const rendered = `${number}\t${line.replace(/\r$/, "")}${lineChars > lineLimit && lineCut !== undefined ? ` ${lineCut}` : ""}`;
     const length = Array.from(rendered).length + 1;
     if (lines.length > 0 && (lines.length >= limit || outputChars + length > budget)) return false;
     lines.push(rendered);
@@ -227,7 +220,7 @@ async function readText(file: FileHandle, path: string, offset: number, limit: n
   const consume = (text: string): boolean => {
     for (const char of text) {
       sourceOffset += char.length;
-      if (char === "\0") throw new ToolIoError(`${path}: binary files are not supported`);
+      if (char === "\0") throw new ToolIoError(texts.always("read_binary", { path }));
       if (char === "\n") {
         if (!emit(true)) return false;
         number += 1;
@@ -248,19 +241,20 @@ async function readText(file: FileHandle, path: string, offset: number, limit: n
     position += read.bytesRead;
     let text: string;
     try { text = decoder.decode(buffer.subarray(0, read.bytesRead), { stream: read.bytesRead !== 0 }); }
-    catch { throw new ToolIoError(`${path}: not valid UTF-8 text; unsupported binary or encoding`); }
+    catch { throw new ToolIoError(texts.always("read_not_utf8", { path })); }
     if (!consume(text)) { more = true; break; }
     if (read.bytesRead === 0) {
       if (lineChars > 0 && !emit(false)) more = true;
       break;
     }
   }
-  if (lines.length === 0) return { output: position === 0 ? `${path}: empty file` : `${path}: offset ${offset} is beyond EOF`, ranges, lineEnds: [] };
+  if (lines.length === 0) return { output: position === 0 ? texts.always("read_empty", { path }) : texts.always("read_past_end", { path, offset: String(offset) }), ranges, lineEnds: [] };
   const end = offset + lines.length - 1;
-  const notice = more ? `Partial view. Continue with offset=${end + 1} and limit=${limit}.` : "End of file.";
-  const header = `${path}: lines ${offset}–${end}\n`;
+  const notice = more ? texts.render("read_more", { offset: String(end + 1), limit: String(limit) }) : texts.render("read_end");
+  const heading = texts.render("read_lines", { path, from: String(offset), to: String(end) });
+  const header = heading === undefined ? "" : `${heading}\n`;
   return {
-    output: `${header}${lines.join("\n")}\n${notice}`,
+    output: `${header}${lines.join("\n")}${notice === undefined ? "" : `\n${notice}`}`,
     ranges,
     lineEnds: lineEnds.map(({ source, output }) => ({ source, output: header.length + output })),
   };

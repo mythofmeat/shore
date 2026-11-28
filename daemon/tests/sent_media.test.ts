@@ -12,6 +12,7 @@ import { handleRead } from "../src/tools/read.ts";
 import * as workspaceNames from "../src/tools/workspace_names.ts";
 import { animatedPng, noisePng, transparentPng, withTextChunk } from "./support/test_images.ts";
 import { testTmp } from "./support/tmp.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 const MB = 1024 * 1024;
 
@@ -158,7 +159,7 @@ test("reading a note shows pictures only: a video it embeds is reported, not rea
   const { dir } = await world();
   await writeFile(join(dir, "clip.mp4"), Buffer.concat([mp4Header(), Buffer.alloc(64)]));
   await writeFile(join(dir, "note.md"), "see ![[clip.mp4]]\n");
-  const page = toolMediaOf(await handleRead({ file_path: "note.md" }, dir));
+  const page = toolMediaOf(await handleRead({ file_path: "note.md" }, dir, new Texts()));
   expect(page?.media).toEqual([]);
   expect(JSON.stringify(page)).toContain("clip.mp4 is not a picture");
 });
@@ -166,5 +167,5 @@ test("reading a note shows pictures only: a video it embeds is reported, not rea
 test("reading a video that can't be decoded says so instead of reading it as text", async () => {
   const { dir } = await world();
   await writeFile(join(dir, "clip.mp4"), Buffer.concat([mp4Header(), Buffer.alloc(64)]));
-  expect(await refusal(handleRead({ file_path: "clip.mp4" }, dir))).toContain("its first frame could not be read");
+  expect(await refusal(handleRead({ file_path: "clip.mp4" }, dir, new Texts()))).toContain("its first frame could not be read");
 });

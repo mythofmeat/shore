@@ -30,6 +30,7 @@ import type { Message } from "../engine/types.ts";
 import type { NewSealedThread } from "../engine/sealed.ts";
 import type { ThreadRecord } from "../engine/threads.ts";
 import type { Texts } from "../texts/texts.ts";
+import { READ_TEXT_NAMES } from "../texts/registry.ts";
 
 export interface ToolContext {
   texts: Texts;
@@ -138,6 +139,7 @@ export async function dispatchTool(
       return decodeToolValue(await workspace.call("read", {
         input: args,
         workspaceDir: ctx.workspaceDir,
+        texts: ctx.texts.overrides(READ_TEXT_NAMES),
         ...(ctx.maxResultChars === undefined ? {} : { maxChars: ctx.maxResultChars }),
         ...(ctx.maxInlineImageBytes === undefined ? {} : { maxImageBytes: ctx.maxInlineImageBytes }),
         ...(ctx.images === undefined ? {} : { images: ctx.images }),

@@ -4497,7 +4497,7 @@ test("with every text Shore writes pointed at a marker, a reply carrying every k
         "here is the lamp", "thank you", "one from before", "tell me a story in parts", "go on", "wait, what is the fox called?",
         "I was waiting for you.", "It glows: ![[nowhere.png]]", "I lit it while you were away.", "You're welcome.", "I remember.",
         "reply to: tell me a story in parts", "reply to: go on", "reply to: wait, what is the fox called?", "reply to: thank you", "reply to: one from before",
-        "Let me look.", "Done.", `${join(workspace, "SOUL.md")}: lines 1–1\n1\tAda\nEnd of file.`, SOUL_READ, "Ada",
+        "Let me look.", "Done.", "1\tAda", SOUL_READ, "Ada",
       ].sort((a, b) => b.length - a.length);
       const requests = [...script.replies, ...script.wakes];
       expect(script.wakes.length).toBeGreaterThanOrEqual(2);
@@ -4519,7 +4519,7 @@ test("with every text Shore writes pointed at a marker, a reply carrying every k
   const toolTexts = ALL_TOOLS.flatMap((tool) => [toolText(tool.name), ...Object.keys((tool.parameters as { properties: Record<string, unknown> }).properties).map((parameter) => parameterText(tool.name, parameter))]);
   expect([...given.keys()].filter((name) => !toolTexts.includes(name)).sort()).toEqual([
     "digest_first", "digest_user", "digest_you", "fired_trigger", "last_wake_interrupted", "last_wrote_here", "last_wrote_home",
-    "opened_by_you", "picture", "picture_gone", "pictures_not_sent", "pinned_file", "sent_picture", "status", "status_cleared", "status_item",
+    "opened_by_you", "picture", "picture_gone", "pictures_not_sent", "pinned_file", "read_end", "read_line_cut", "read_lines", "sent_picture", "status", "status_cleared", "status_item",
     "stopped_interrupted", "thread", "thread_pins", "time", "time_later", "wake", "wake_opener", "wake_opener_kept", "wake_running", "wake_running_own_time",
     "wake_status", "wake_turn", "working_kept", "working_kept_unfinished",
   ].sort());

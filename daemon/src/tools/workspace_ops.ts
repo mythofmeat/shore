@@ -3,6 +3,7 @@ import { access, mkdir, readdir, readFile, realpath, rm, rmdir, writeFile } from
 import { dirname, join } from "node:path";
 
 import type { ImagesConfig } from "../config/app.ts";
+import { Texts, type TextOverrides } from "../texts/texts.ts";
 import { handleEdit } from "./edit.ts";
 import { InvalidArgs, NotImplemented, ToolIoError } from "./errors.ts";
 import { carryToolMedia, toolMediaOf, type ToolResultPayload } from "./media.ts";
@@ -17,7 +18,7 @@ export type FileRead = { data: string } | { error: { code?: string; message: str
 export type EncodedToolValue = { value: unknown } | { media: ToolResultPayload };
 
 export interface WorkspaceOpTable {
-  read: (args: { input: Record<string, unknown>; workspaceDir: string; maxChars?: number; maxImageBytes?: number; images?: ImagesConfig }, signal?: AbortSignal) => Promise<EncodedToolValue>;
+  read: (args: { input: Record<string, unknown>; workspaceDir: string; texts: TextOverrides; maxChars?: number; maxImageBytes?: number; images?: ImagesConfig }, signal?: AbortSignal) => Promise<EncodedToolValue>;
   edit: (args: { input: Record<string, unknown>; workspaceDir: string }, signal?: AbortSignal) => Promise<string>;
   pictures: (args: { workspaceDir: string; targets: PictureTarget[] }, signal?: AbortSignal) => Promise<PictureLookup[]>;
   firstFrame: (args: { path: string }, signal?: AbortSignal) => Promise<string | null>;
@@ -60,8 +61,8 @@ async function pruneEmptyParents(root: string, path: string): Promise<void> {
 }
 
 export const WORKSPACE_OPS: WorkspaceOpTable = {
-  read: async ({ input, workspaceDir, maxChars, maxImageBytes, images }, signal) =>
-    encodeToolValue(await handleRead(input, workspaceDir, signal, maxChars, maxImageBytes, images)),
+  read: async ({ input, workspaceDir, texts, maxChars, maxImageBytes, images }, signal) =>
+    encodeToolValue(await handleRead(input, workspaceDir, Texts.from(texts), signal, maxChars, maxImageBytes, images)),
   edit: async ({ input, workspaceDir }, signal) => await handleEdit(input, workspaceDir, signal),
   pictures: async (args, signal) => await lookUpPictures(args, signal),
   firstFrame: async ({ path }, signal) => (await firstVideoFrame(path, signal))?.toString("base64") ?? null,

@@ -62,6 +62,39 @@ import images__request_cap from "../../prompts/images/request_cap.md" with { typ
 import images__text_only from "../../prompts/images/text_only.md" with { type: "text" };
 import images__from_tool from "../../prompts/images/from_tool.md" with { type: "text" };
 import images__from_tool_one from "../../prompts/images/from_tool_one.md" with { type: "text" };
+import read__lines from "../../prompts/tools/workspace/read/answers/lines.md" with { type: "text" };
+import read__more from "../../prompts/tools/workspace/read/answers/more.md" with { type: "text" };
+import read__end from "../../prompts/tools/workspace/read/answers/end.md" with { type: "text" };
+import read__empty from "../../prompts/tools/workspace/read/answers/empty.md" with { type: "text" };
+import read__past_end from "../../prompts/tools/workspace/read/answers/past_end.md" with { type: "text" };
+import read__line_cut from "../../prompts/tools/workspace/read/answers/line_cut.md" with { type: "text" };
+import read__binary from "../../prompts/tools/workspace/read/answers/binary.md" with { type: "text" };
+import read__not_utf8 from "../../prompts/tools/workspace/read/answers/not_utf8.md" with { type: "text" };
+import read__found from "../../prompts/tools/workspace/read/answers/found.md" with { type: "text" };
+import read__found_folder from "../../prompts/tools/workspace/read/answers/found_folder.md" with { type: "text" };
+import read__missing from "../../prompts/tools/workspace/read/answers/missing.md" with { type: "text" };
+import read__folder_options from "../../prompts/tools/workspace/read/answers/folder_options.md" with { type: "text" };
+import read__image_data from "../../prompts/tools/workspace/read/answers/image_data.md" with { type: "text" };
+import read__text_options from "../../prompts/tools/workspace/read/answers/text_options.md" with { type: "text" };
+import read__original_off from "../../prompts/tools/workspace/read/answers/original_off.md" with { type: "text" };
+import read__original_image from "../../prompts/tools/workspace/read/answers/original_image.md" with { type: "text" };
+import read__index_cut from "../../prompts/tools/workspace/read/answers/index_cut.md" with { type: "text" };
+import read__folder from "../../prompts/tools/workspace/read/answers/folder.md" with { type: "text" };
+import read__folder_cut from "../../prompts/tools/workspace/read/answers/folder_cut.md" with { type: "text" };
+import read__folder_counts from "../../prompts/tools/workspace/read/answers/folder_counts.md" with { type: "text" };
+import read__image from "../../prompts/tools/workspace/read/answers/image.md" with { type: "text" };
+import read__video_frame from "../../prompts/tools/workspace/read/answers/video_frame.md" with { type: "text" };
+import read__no_frame from "../../prompts/tools/workspace/read/answers/no_frame.md" with { type: "text" };
+import read__not_reduced from "../../prompts/tools/workspace/read/answers/not_reduced.md" with { type: "text" };
+import read__not_decoded from "../../prompts/tools/workspace/read/answers/not_decoded.md" with { type: "text" };
+import read__md_images_off from "../../prompts/tools/workspace/read/answers/md_images_off.md" with { type: "text" };
+import read__md_images_over from "../../prompts/tools/workspace/read/answers/md_images_over.md" with { type: "text" };
+import read__md_image_failed from "../../prompts/tools/workspace/read/answers/md_image_failed.md" with { type: "text" };
+import read__md_more_failed from "../../prompts/tools/workspace/read/answers/md_more_failed.md" with { type: "text" };
+import read__md_more_images from "../../prompts/tools/workspace/read/answers/md_more_images.md" with { type: "text" };
+import read__md_failed from "../../prompts/tools/workspace/read/answers/md_failed.md" with { type: "text" };
+import read__md_nul from "../../prompts/tools/workspace/read/answers/md_nul.md" with { type: "text" };
+import read__md_changed from "../../prompts/tools/workspace/read/answers/md_changed.md" with { type: "text" };
 import messages__earlier_not_shown from "../../prompts/messages/earlier_not_shown.md" with { type: "text" };
 import messages__opened_by_you from "../../prompts/messages/opened_by_you.md" with { type: "text" };
 import messages__picture_gone from "../../prompts/messages/picture_gone.md" with { type: "text" };
@@ -333,6 +366,45 @@ export const IMAGE_TEXTS: readonly TextSpec[] = [
   text("image_from_tool_one", images__from_tool_one, "Before each picture of a tool's result on Gemini models before Gemini 3.", { tool: "the tool's name, or the call's id when Shore doesn't know it", id: "the tool call's id" }),
 ];
 
+const READ_PATH = "the file's path";
+const READ_LIST = "the images' names, with \", \" between them and how many more after the first few";
+
+export const READ_TEXTS: readonly TextSpec[] = [
+  text("read_lines", read__lines, "The first line of what read answers for a text file.", { path: READ_PATH, from: "the first line shown", to: "the last line shown" }),
+  text("read_more", read__more, "The last line of what read answers when the file goes on past what it shows.", { offset: "the line to go on from", limit: "the limit it was given" }),
+  text("read_end", read__end, "The last line of what read answers when it shows the end of the file."),
+  must("read_empty", read__empty, "What read answers for an empty file.", { path: READ_PATH }),
+  must("read_past_end", read__past_end, "What read answers when the offset it was given is past the file's last line.", { path: READ_PATH, offset: "the offset" }),
+  text("read_line_cut", read__line_cut, "After a line read cuts short because it is too long.", { chars: "how many characters of it are shown" }),
+  must("read_binary", read__binary, "read's error for a file that isn't text.", { path: READ_PATH }),
+  must("read_not_utf8", read__not_utf8, "read's error for a file that isn't UTF-8 text.", { path: READ_PATH }),
+  text("read_found", read__found, "Before what read answers when the file it was given doesn't exist and it found one of that name.", { asked: "what it was given", link: "the file it found, as a link" }),
+  text("read_found_folder", read__found_folder, "The same, when it was given a folder and found a file of that name.", { asked: "what it was given", link: "the file it found, as a link" }),
+  must("read_missing", read__missing, "read's error for a file that doesn't exist and has no other file of its name.", { path: READ_PATH, why: "what the search by name found" }),
+  must("read_folder_options", read__folder_options, "read's error when it is given offset, limit or original for a folder."),
+  must("read_image_data", read__image_data, "read's error for a file named as a picture that isn't one it can read.", { path: READ_PATH }),
+  must("read_text_options", read__text_options, "read's error when it is given offset or limit for a picture."),
+  must("read_original_off", read__original_off, "read's error when it is given original while images.read.allow_original is off."),
+  must("read_original_image", read__original_image, "read's error when it is given original for a file that isn't a picture."),
+  text("read_index_cut", read__index_cut, "After a folder's INDEX.md that read shows in place of the folder, when the folder's listing doesn't fit after it.", { folder: "the folder" }),
+  text("read_folder", read__folder, "The first line of what read answers for a folder.", { path: "the folder" }),
+  text("read_folder_cut", read__folder_cut, "The last line of a folder's listing that is too long to show whole.", { entries: "how many entries are shown" }),
+  text("read_folder_counts", read__folder_counts, "The last line of a folder's listing.", { folders: "how many folders, like 1 folder or 3 folders", files: "how many files, like 1 file or 3 files", hidden: "how many hidden files and folders are left out, when any are" }),
+  text("read_image", read__image, "What read answers for a picture, before the picture.", { path: READ_PATH, type: "its type, like image/png", width: "its width in pixels", height: "its height in pixels", bytes: "how many bytes it is" }),
+  text("read_video_frame", read__video_frame, "What read answers for a video, before its first frame.", { path: READ_PATH, type: "its type, like video/mp4", bytes: "how many bytes it is" }),
+  must("read_no_frame", read__no_frame, "read's error for a video whose first frame can't be read.", { path: READ_PATH, type: "its type, like video/mp4", bytes: "how many bytes it is" }),
+  must("read_not_reduced", read__not_reduced, "read's error for a picture that can't be made small enough to send.", { path: READ_PATH, error: "why" }),
+  must("read_not_decoded", read__not_decoded, "read's error for a picture that can't be decoded.", { path: READ_PATH }),
+  text("read_md_images_off", read__md_images_off, "After what read answers for a Markdown file whose pictures aren't sent because pictures are off for read.", { images: READ_LIST }),
+  text("read_md_images_over", read__md_images_over, "After what read answers for a Markdown file whose pictures don't fit in what one read can send.", { images: READ_LIST, bytes: "how many bytes of pictures one read can send" }),
+  text("read_md_image_failed", read__md_image_failed, "After what read answers for a Markdown file, for each picture in it that can't be sent.", { image: "the picture as the file names it", error: "why" }),
+  text("read_md_more_failed", read__md_more_failed, "After those, when more pictures than are named can't be sent.", { count: "how many more" }),
+  text("read_md_more_images", read__md_more_images, "After what read answers for a Markdown file with more pictures in it than one read sends.", { count: "how many more", max: "how many one read sends" }),
+  text("read_md_failed", read__md_failed, "After what read answers for a Markdown file whose pictures can't be looked for at all.", { error: "why" }),
+  must("read_md_nul", read__md_nul, "Why a picture in a Markdown file can't be sent when its path has a NUL byte in it."),
+  must("read_md_changed", read__md_changed, "Why the pictures in a Markdown file can't be looked for when the file changes while read reads it."),
+];
+
 const GUIDE_VALUES = { user: "the user's name", tools_off: "the tools a topic names that are off" };
 
 export const GUIDE_TEXTS: readonly TextSpec[] = [
@@ -388,7 +460,9 @@ export const TOOL_TEXTS: readonly TextSpec[] = Object.entries(TOOL_TEXTS_SHIPPED
   ...Object.entries(parameters).map(([parameter, shipped]) => text(parameterText(tool, parameter), shipped, `The description of the ${parameter} parameter of ${tool}.`, TOOL_VALUES)),
 ]);
 
-export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...IMAGE_TEXTS, ...GUIDE_TEXTS];
+export const READ_TEXT_NAMES: readonly string[] = READ_TEXTS.map((spec) => spec.name);
+
+export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...IMAGE_TEXTS, ...READ_TEXTS, ...GUIDE_TEXTS];
 
 export const TEXT_SPECS: ReadonlyMap<string, TextSpec> = new Map(TEXTS.map((spec) => [spec.name, spec]));
 

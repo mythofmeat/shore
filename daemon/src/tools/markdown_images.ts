@@ -7,6 +7,7 @@ import { MAX_INLINE_TOOL_IMAGES, MAX_LISTED_MEDIA_NOTES, carryToolMedia, type To
 import { base64Bytes } from "../util/base64.ts";
 import { readImageAt } from "./read_image.ts";
 import { embeddedPicture, workspaceNames, type WorkspaceNames } from "./workspace_names.ts";
+import type { Texts } from "../texts/texts.ts";
 
 const MAX_MARKDOWN_IMAGE_SOURCE_BYTES = 1024 * 1024;
 
@@ -27,11 +28,11 @@ interface ImageRef {
   end: number;
 }
 
-function localImagePath(url: string, documentPath: string): string | undefined {
+function localImagePath(texts: Texts, url: string, documentPath: string): string | undefined {
   const target = url.split(/[?#]/, 1)[0] ?? "";
   const path = decodeURIComponent(target);
   if (path === "" || /^[a-z][a-z0-9+.-]*:/i.test(path) || path.startsWith("//") || path.startsWith("\\\\")) return undefined;
-  if (path.includes("\0")) throw new Error("image path contains a NUL byte");
+  if (path.includes("\0")) throw new Error(texts.always("read_md_nul"));
   return resolve(dirname(documentPath), path);
 }
 
@@ -84,28 +85,30 @@ function afterLineOf(page: TextPage, end: number): number | undefined {
   return page.lineEnds.find((line) => end <= line.source)?.output;
 }
 
-function overBudgetNote(urls: readonly string[], maxImageBytes: number): string {
-  const reason = maxImageBytes === 0
-    ? "inline images are disabled for this tool"
-    : `they would not fit the ${String(maxImageBytes)}-byte inline image budget for this read. Read those image files directly to view them.`;
-  return `[Markdown image(s) ${listSome(urls)} not read: ${reason}]`;
+function overBudgetNote(texts: Texts, urls: readonly string[], maxImageBytes: number): string | undefined {
+  return maxImageBytes === 0
+    ? texts.render("read_md_images_off", { images: listSome(urls) })
+    : texts.render("read_md_images_over", { images: listSome(urls), bytes: String(maxImageBytes) });
 }
 
 export async function expandMarkdownImages(
-  file: FileHandle, path: string, workspaceDir: string, page: TextPage, maxImageBytes: number, preparedImageBytes: number, signal?: AbortSignal,
+  texts: Texts, file: FileHandle, path: string, workspaceDir: string, page: TextPage, maxImageBytes: number, preparedImageBytes: number, signal?: AbortSignal,
 ): Promise<unknown> {
   if (page.ranges.length === 0) return page.output;
   const notes: string[] = [];
+  const note = (text: string | undefined): void => {
+    if (text !== undefined) notes.push(text);
+  };
   const payload: ToolResultPayload = { value: page.output, media: [], extra: [], notes };
   try {
     const bytes = await readBoundedFile(file, path, MAX_MARKDOWN_IMAGE_SOURCE_BYTES, "Markdown image source", signal);
     const source = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-    if (page.ranges.some((range) => source.slice(range.start, range.end) !== range.text)) throw new Error("file changed while reading; retry to expand images");
+    if (page.ranges.some((range) => source.slice(range.start, range.end) !== range.text)) throw new Error(texts.always("read_md_changed"));
     const refs = imageRefs(source, page);
     let names: Promise<WorkspaceNames> | undefined;
     const shownRefs = new Set<string>();
     const paths = new Set<string>();
-    const failures: string[] = [];
+    const failures: (string | undefined)[] = [];
     const overBudget: string[] = [];
     const budget = { remaining: maxImageBytes };
     const bytesAfterResize = (size: number) => Math.min(size, preparedImageBytes);
@@ -116,11 +119,11 @@ export async function expandMarkdownImages(
       if (shownRefs.has(shown)) continue;
       shownRefs.add(shown);
       try {
-        const imagePath = wikilink ? await embeddedPicture(await (names ??= workspaceNames(workspaceDir, signal)), target, MAX_LISTED_MEDIA_NOTES) : localImagePath(target, path);
+        const imagePath = wikilink ? await embeddedPicture(await (names ??= workspaceNames(workspaceDir, signal)), target, MAX_LISTED_MEDIA_NOTES) : localImagePath(texts, target, path);
         if (imagePath === undefined || paths.has(imagePath)) continue;
         paths.add(imagePath);
         if (paths.size > MAX_INLINE_TOOL_IMAGES) continue;
-        const image = await readImageAt(imagePath, fits, signal);
+        const image = await readImageAt(texts, imagePath, fits, signal);
         if (image === undefined) {
           overBudget.push(shown);
           continue;
@@ -131,16 +134,16 @@ export async function expandMarkdownImages(
         payload.media.push(at === undefined ? image : { ...image, at });
       } catch (error) {
         signal?.throwIfAborted();
-        failures.push(`[Markdown image ${shown} not attached: ${error instanceof Error ? error.message : String(error)}]`);
+        failures.push(texts.render("read_md_image_failed", { image: shown, error: error instanceof Error ? error.message : String(error) }));
       }
     }
-    notes.push(...failures.slice(0, MAX_LISTED_MEDIA_NOTES));
-    if (failures.length > MAX_LISTED_MEDIA_NOTES) notes.push(`[${String(failures.length - MAX_LISTED_MEDIA_NOTES)} more Markdown image reference(s) could not be attached]`);
-    if (overBudget.length > 0) notes.push(overBudgetNote(overBudget, maxImageBytes));
-    if (paths.size > MAX_INLINE_TOOL_IMAGES) notes.push(`[${String(paths.size - MAX_INLINE_TOOL_IMAGES)} more local image reference(s) not read; at most ${String(MAX_INLINE_TOOL_IMAGES)} are expanded per read. Read those image files directly to view them.]`);
+    for (const failure of failures.slice(0, MAX_LISTED_MEDIA_NOTES)) note(failure);
+    if (failures.length > MAX_LISTED_MEDIA_NOTES) note(texts.render("read_md_more_failed", { count: String(failures.length - MAX_LISTED_MEDIA_NOTES) }));
+    if (overBudget.length > 0) note(overBudgetNote(texts, overBudget, maxImageBytes));
+    if (paths.size > MAX_INLINE_TOOL_IMAGES) note(texts.render("read_md_more_images", { count: String(paths.size - MAX_INLINE_TOOL_IMAGES), max: String(MAX_INLINE_TOOL_IMAGES) }));
   } catch (error) {
     signal?.throwIfAborted();
-    notes.push(`[Markdown images not expanded: ${error instanceof Error ? error.message : String(error)}]`);
+    note(texts.render("read_md_failed", { error: error instanceof Error ? error.message : String(error) }));
   }
   return carryToolMedia(payload);
 }
