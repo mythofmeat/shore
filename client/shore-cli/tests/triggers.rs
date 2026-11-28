@@ -7,6 +7,23 @@ use serde_json::{Value, json};
 use support::{asked, printed, sent};
 
 fn status(state: &str) -> Value {
+    status_with(
+        state,
+        json!({ "trigger": "lamp", "at": "2026-11-18T13:00:00+00:00" }),
+        json!(null),
+    )
+}
+
+fn status_with(state: &str, next_wake: Value, asked: Value) -> Value {
+    let mut triggers = json!({
+        "enabled": true,
+        "next_wake": next_wake,
+        "triggers": [{ "name": "lamp", "does": "every 1h, wakes ada, \"Trim the lamp.\"", "status": "never fired" }],
+        "not_running": [],
+    });
+    if let (Some(fields), false) = (triggers.as_object_mut(), asked.is_null()) {
+        fields.extend([("asked".to_owned(), asked)]);
+    }
     json!({
         "character": "ada", "keepalive_halts": [], "turn_count": 3, "active_model": "anthropic:opus",
         "config_dir": "/config", "data_dir": "/data", "cache_dir": "/cache",
@@ -14,12 +31,7 @@ fn status(state: &str) -> Value {
         "tokens": { "input": 0, "output": 0, "cache_read": 0, "cache_write": 0 },
         "autonomy": { "state": state, "wakes_without_user": 1, "dormant_after_wakes": 3, "dormant_after_idle_time_secs": 0, "recent_events": [] },
         "activity": null, "history_index": null, "sections": ["autonomy", "triggers"],
-        "triggers": {
-            "enabled": true,
-            "next_wake": { "trigger": "lamp", "at": "2026-11-18T13:00:00+00:00" },
-            "triggers": [{ "name": "lamp", "does": "every 1h, wakes ada, \"Trim the lamp.\"", "status": "never fired" }],
-            "not_running": [],
-        },
+        "triggers": triggers,
     })
 }
 
@@ -61,4 +73,38 @@ fn the_triggers_section_lists_each_one_and_warns_only_while_the_character_is_dor
         dormant.get(1).map(String::as_str),
         Some("! ada is dormant, so nothing fires until you write")
     );
+}
+
+#[test]
+fn status_names_a_wake_the_character_asked_for_as_next_and_lists_it_in_the_triggers_section() {
+    let reply = status_with(
+        "Active",
+        json!({ "trigger": "", "thread": "ring", "at": "2026-11-18T13:00:00+00:00" }),
+        json!([{ "thread": "ring", "does": "asked for from \"main\": Tell part two.", "status": "starts Wednesday 2026-11-18 \u{00b7} 1:00 PM" }]),
+    );
+    let row = printed_lines(reply.clone(), &["status"]);
+    assert!(
+        row.iter()
+            .any(|line| line == "triggers 1 \u{00b7} next wake asked for in \"ring\" due now"),
+        "{row:?}"
+    );
+    let section = printed_lines(reply, &["status", "--section", "triggers"]);
+    assert_eq!(
+        section.get(3..),
+        Some(
+            &[
+                "\"ring\" asked for from \"main\": Tell part two.".to_owned(),
+                "starts Wednesday 2026-11-18 \u{00b7} 1:00 PM".to_owned()
+            ][..]
+        )
+    );
+}
+
+fn printed_lines(reply: Value, args: &[&str]) -> Vec<String> {
+    let (output, _) = asked(reply, args);
+    assert!(output.status.success(), "{output:?}");
+    printed(&output)
+        .lines()
+        .map(|line| line.split_whitespace().collect::<Vec<_>>().join(" "))
+        .collect()
 }

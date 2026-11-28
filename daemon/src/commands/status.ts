@@ -17,7 +17,7 @@ import type { RunningStatusReport } from "../protocol/RunningStatusReport.ts";
 import type { TriggersStatusReport } from "../protocol/TriggersStatusReport.ts";
 import type { TriggersView } from "../autonomy/trigger_loop.ts";
 import { hostZone } from "../ledger/zoned.ts";
-import { describeTrigger, userVoice } from "../tools/list_triggers.ts";
+import { describeAsked, describeTrigger, userVoice } from "../tools/list_triggers.ts";
 
 type Args = OperationInput<"error_log">;
 
@@ -75,14 +75,18 @@ export function autonomyWire(autonomy: AutonomyStatus, now: number): AutonomySta
 
 export function triggersWire(view: TriggersView, character: string, active: boolean, timeZone: string): TriggersStatusReport {
   const due = view.enabled && active
-    ? view.triggers.flatMap((each) => (each.trigger.wakes && !each.off && each.nextAt !== undefined ? [{ trigger: each.trigger.name, at: each.nextAt }] : []))
+    ? [
+        ...view.triggers.flatMap((each) => (each.trigger.wakes && !each.off && each.nextAt !== undefined ? [{ next: { trigger: each.trigger.name }, at: each.nextAt }] : [])),
+        ...view.asked.map((firing) => ({ next: { trigger: "", thread: firing.thread ?? "" }, at: firing.startsAt ?? firing.at })),
+      ]
     : [];
   const next = due.reduce<(typeof due)[number] | undefined>((soonest, each) => (soonest !== undefined && soonest.at <= each.at ? soonest : each), undefined);
   return {
     enabled: view.enabled,
-    ...(next === undefined ? {} : { next_wake: { trigger: next.trigger, at: rfc3339(next.at) } }),
+    ...(next === undefined ? {} : { next_wake: { ...next.next, at: rfc3339(next.at) } }),
     triggers: view.triggers.map((each) => describeTrigger(each, userVoice(character), timeZone)),
     not_running: view.problems,
+    asked: view.asked.map((firing) => describeAsked(firing, timeZone)),
   };
 }
 

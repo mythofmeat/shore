@@ -23,7 +23,10 @@ fn switched_off(triggers: &Value) -> bool {
 }
 
 fn next_line(next: &Value, now: DateTime<Local>) -> String {
-    let name = text(next, "trigger");
+    let name = match next.get("thread").and_then(Value::as_str) {
+        Some(thread) => format!("wake asked for in \"{thread}\""),
+        None => text(next, "trigger").to_owned(),
+    };
     match super::parse_timestamp(text(next, "at")) {
         Some(at) if at > now => format!(
             "next {name} in {}",
@@ -43,7 +46,7 @@ pub(crate) fn status_row(
     if switched_off(triggers) {
         return ("switched off \u{00b7} nothing fires".to_owned(), Tone::Warn);
     }
-    if count == 0 && not_running == 0 {
+    if count == 0 && not_running == 0 && listed(triggers, "asked").is_empty() {
         return (
             format!("none \u{00b7} nothing wakes {character}"),
             Tone::Warn,
@@ -83,7 +86,8 @@ pub(crate) fn write_status_section<W: Write>(
     }
     let each = listed(triggers, "triggers");
     let not_running = listed(triggers, "not_running");
-    if each.is_empty() && not_running.is_empty() {
+    let asked = listed(triggers, "asked");
+    if each.is_empty() && not_running.is_empty() && asked.is_empty() {
         empty(
             out,
             &format!("none, so nothing wakes {character} on its own"),
@@ -94,6 +98,10 @@ pub(crate) fn write_status_section<W: Write>(
     for trigger in each {
         rows.add(text(trigger, "name"), text(trigger, "does"));
         rows.add_toned("", text(trigger, "status"), Tone::Muted);
+    }
+    for wake in asked {
+        rows.add(&format!("\"{}\"", text(wake, "thread")), text(wake, "does"));
+        rows.add_toned("", text(wake, "status"), Tone::Muted);
     }
     rows.write(out);
     for problem in not_running {
@@ -162,6 +170,27 @@ mod tests {
         );
     }
 
+    #[test]
+    fn the_row_names_a_wake_the_character_asked_for_when_it_starts_first() {
+        let listed = json!([{ "name": "lamp" }]);
+        let next = json!({ "enabled": true, "next_wake": { "trigger": "", "thread": "ring", "at": at(2_400) }, "triggers": listed, "not_running": [] });
+        assert_eq!(
+            row(&next),
+            (
+                "1 \u{00b7} next wake asked for in \"ring\" in 40m".to_owned(),
+                Tone::Plain
+            )
+        );
+        let only = json!({ "enabled": true, "next_wake": { "trigger": "", "thread": "ring", "at": at(0) }, "triggers": [], "not_running": [], "asked": [{ "thread": "ring" }] });
+        assert_eq!(
+            row(&only),
+            (
+                "0 \u{00b7} next wake asked for in \"ring\" due now".to_owned(),
+                Tone::Plain
+            )
+        );
+    }
+
     fn shown(triggers: &Value, dormant: bool) -> (String, Vec<String>) {
         crate::output::set_color_enabled(false);
         let mut out = Vec::new();
@@ -206,6 +235,26 @@ mod tests {
                 "         next soon",
                 "  ! `tide` isn't running: no reason",
             ]
+        );
+    }
+
+    #[test]
+    fn the_section_lists_the_wakes_the_character_asked_for_after_its_triggers() {
+        let asked = json!([{ "thread": "ring", "does": "asked for from \"main\": Tell part two.", "status": "starts at five" }]);
+        let both = json!({ "enabled": true, "triggers": [{ "name": "lamp", "does": "every 1h", "status": "never fired" }], "not_running": [], "asked": asked });
+        assert_eq!(
+            shown(&both, false).1,
+            [
+                "  lamp    every 1h",
+                "          never fired",
+                "  \"ring\"  asked for from \"main\": Tell part two.",
+                "          starts at five",
+            ]
+        );
+        let alone = json!({ "enabled": true, "triggers": [], "not_running": [], "asked": asked });
+        assert_eq!(
+            first(&alone, false),
+            "  \"ring\"  asked for from \"main\": Tell part two."
         );
     }
 

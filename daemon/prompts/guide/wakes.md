@@ -1,13 +1,13 @@
 # Wakes
 
-A wake is a turn of your own: Shore starts it, not a message from {{user}}. Triggers are what set wakes off, so with no trigger of your own nothing wakes you. Every wake starts fresh, with none of an earlier one in front of it.
+A wake is a turn of your own: Shore starts it, not a message from {{user}}. Triggers set off most wakes: with no trigger of your own, nothing wakes you but a wake you asked for with `{{wake_in_thread}}` and a sealed thread reaching its time. Every wake starts fresh, with none of an earlier one in front of it.
 
 {{#if triggers_on}}{{user}} has your triggers switched on.{{/if}}{{#if triggers_off}}{{user}} has your triggers switched off, so nothing wakes you until they turn them on. It is their setting `enabled` under `[triggers]`, the one switch for all of them.{{/if}}
 
 ## What wakes you
 
 - A trigger of yours, in `TRIGGERS.toml`. The `triggers` topic has the file, and `{{list_triggers}}` shows what Shore made of it.
-- `{{wake_in_thread}}`, which hands something over to a wake in another of your threads once your turn is over.
+- `{{wake_in_thread}}`, which hands something over to a wake in another of your threads once your turn is over, or wakes you in any thread of yours at a time you give it. `{{list_triggers}}` lists the ones that haven't started.
 - A sealed thread reaching its time, which wakes you in it.
 
 ## What each costs
@@ -23,16 +23,17 @@ From least to most:
 - A trigger with `thread = "a-thread"` wakes you in that thread. It can be any thread of yours but your wakes thread: a side thread and a sealed thread both work.
 - A trigger with no `thread` wakes you in your home thread. Your working goes to your wakes thread, so it doesn't crowd the conversation.
 - A wake is stopped by a message from {{user}} in its thread, your home thread included, so that you can answer them. It isn't stopped by one in another thread.
-- `{{wake_in_thread}}` takes any thread of yours but the one you are in and your wakes thread.
+- `{{wake_in_thread}}` takes any thread of yours but your wakes thread. It takes the one you are in only with `when`.
 
 ## When a wake starts
 
 - One wake of yours runs at a time, whichever threads they are for. One that comes due while another is running waits for it to end, so a trigger can start late by up to the running wake's limit, which is never more than {{max_wake_limit}}. When several are waiting, each thread's turn comes in the order its wake came due.
 - If {{user}} wrote in the wake's thread in the last {{wake_quiet}}, it waits until they have been quiet there that long, however lately they wrote elsewhere.
 - Triggers that fire together for the same thread share one wake. It opens with each reason, and may run for the longest of their limits.
-- A wake you handed over starts once the turn that asked is over. If a wake is already running in that thread, it waits for that one to end and then starts as a wake of its own.
-- A thread holds one wake you handed over at a time. Handing over another while the first is still waiting is refused, and the refusal shows what is waiting. To put the new one in its place, call again with `overwrite` set to true. A wake {{user}} interrupted is not a request still waiting, since it has started: it picks up whatever you hand over next, and a new request for its thread joins it.
-- Triggers that fire for that thread meanwhile join the wake you handed over.
+- A wake you handed over starts once the turn that asked is over. One you gave a `when` starts at that time instead, by the host's clock, or as soon as Shore is running again if it wasn't then. Either way, if a wake is already running in that thread, it waits for that one to end and then starts as a wake of its own.
+- A wake you asked for that hasn't started is kept when Shore restarts.
+- A thread holds one wake you handed over at a time, with a `when` or without. Handing over another while the first is still waiting is refused, and the refusal shows what is waiting and, for one with a `when`, when it starts. To put the new one in its place, call again with `overwrite` set to true. Nothing calls off a wake you asked for: `overwrite` only puts another in its place. A wake {{user}} interrupted is not a request still waiting, since it has started: it picks up whatever you hand over next, and one with a `when` joins it only if it is still waiting at that time.
+- Triggers that fire for that thread while the wake you handed over waits to start join it. Before the time a `when` gives, a trigger there wakes you on its own, and the wake you asked for still starts at its time.
 - A wake that was itself handed over can't hand on to another, so wakes don't chain.
 
 ## What a wake starts with
@@ -87,13 +88,13 @@ A trigger that fires for a thread while a wake is running there is handed to the
 
 You go dormant when {{user}} has been away: after {{dormant_after_wakes}} wakes in a row with no message from them, or once {{dormant_after_idle}} have passed since their last message. Both are {{user}}'s settings.
 
-While you are dormant nothing wakes you: triggers and checks stop, and a wake that was waiting is dropped. Nothing that came due then is made up afterwards. A sealed thread still opens at its time and wakes you in it.
+While you are dormant nothing wakes you: triggers and checks stop, and a wake that was waiting is dropped. A wake you asked for with `when` is kept until its time, and dropped if you are dormant then. Nothing that came due then is made up afterwards. A sealed thread still opens at its time and wakes you in it.
 
 A message from {{user}}, in any thread, ends it.
 
 ## When something is wrong
 
-- A wake aimed at a thread you don't have, or at your wakes thread, runs nothing, and nothing tells you. `{{threads}}` lists the threads you do have.
-- `{{wake_in_thread}}` is refused, with the reason, for a thread you don't have, for the thread you are in, for your wakes thread, without a reason, from a wake that was itself handed over, or when your triggers are switched off.
+- A wake aimed at a thread you don't have, at your wakes thread, or at a thread that has been archived or put on hold by the time it starts runs nothing, and nothing tells you. `{{threads}}` lists the threads you do have.
+- `{{wake_in_thread}}` is refused, with the reason, for a thread you don't have, for the thread you are in unless you give `when`, for your wakes thread, without a reason, for a `when` Shore can't read or that has passed, from a wake that was itself handed over, or when your triggers are switched off.
 - When a usage budget of {{user}}'s holds your wakes back, a wake is skipped before it starts, and nothing is written to its thread.
 - A wake whose model call fails ends there. A line in its thread gives the error, and the next wake there is told, as it is after a wake that was stopped. Nothing tries it again.

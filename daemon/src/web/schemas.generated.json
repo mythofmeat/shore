@@ -4566,12 +4566,20 @@
             "items": {
               "type": "string"
             }
+          },
+          "asked": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/AskedWakeReport"
+            },
+            "default": []
           }
         },
         "required": [
           "enabled",
           "triggers",
-          "not_running"
+          "not_running",
+          "asked"
         ]
       },
       "NextWakeReport": {
@@ -4579,6 +4587,12 @@
         "properties": {
           "trigger": {
             "type": "string"
+          },
+          "thread": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "at": {
             "type": "string"
@@ -4604,6 +4618,25 @@
         },
         "required": [
           "name",
+          "does",
+          "status"
+        ]
+      },
+      "AskedWakeReport": {
+        "type": "object",
+        "properties": {
+          "thread": {
+            "type": "string"
+          },
+          "does": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread",
           "does",
           "status"
         ]
@@ -14276,12 +14309,20 @@
             "items": {
               "type": "string"
             }
+          },
+          "asked": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/AskedWakeReport"
+            },
+            "default": []
           }
         },
         "required": [
           "enabled",
           "triggers",
-          "not_running"
+          "not_running",
+          "asked"
         ]
       },
       "NextWakeReport": {
@@ -14289,6 +14330,12 @@
         "properties": {
           "trigger": {
             "type": "string"
+          },
+          "thread": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "at": {
             "type": "string"
@@ -14314,6 +14361,25 @@
         },
         "required": [
           "name",
+          "does",
+          "status"
+        ]
+      },
+      "AskedWakeReport": {
+        "type": "object",
+        "properties": {
+          "thread": {
+            "type": "string"
+          },
+          "does": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread",
           "does",
           "status"
         ]

@@ -514,7 +514,7 @@ export function sharedToolDeps(
       if (request.thread === registry.wakesThread(character)) return { kind: "wakes_thread" };
       const most = registry.effectiveConfig(character).app.triggers.max_wake_limit.asMillis();
       const limitMs = request.limitMs === undefined ? undefined : Math.min(request.limitMs, most);
-      const asked = autonomy.requestWake(character, { name: "", from, reason: request.reason, at: Date.now(), thread: request.thread, limitMs }, request.overwrite);
+      const asked = autonomy.requestWake(character, { name: "", from, reason: request.reason, at: Date.now(), thread: request.thread, limitMs, startsAt: request.startsAt }, request.overwrite);
       return asked.kind === "waiting" ? asked : { kind: "queued", limitMs, replaced: asked.replaced };
     },
     sealThread: async (character, request) => {
