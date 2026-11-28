@@ -1,9 +1,10 @@
 import * as ts from "typescript/unstable/ast";
+import { API } from "typescript/unstable/async";
+import { createVirtualFileSystem } from "typescript/unstable/fs";
 import { closeSync, cpSync, mkdtempSync, openSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { availableParallelism, freemem, setPriority, tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { parseInventorySources } from "./capability_inventory.ts";
 import { DAEMON_EQUIVALENTS, DAEMON_FLOORS } from "./mutation_guards.ts";
 import { unreclaimable } from "./scope_memory.ts";
 
@@ -217,13 +218,39 @@ export function mutatedFiles(): string[] {
   return [...new Bun.Glob("src/**/*.{ts,tsx}").scanSync(ROOT)].filter((file) => !UNMUTATED.some((re) => re.test(file))).sort();
 }
 
+async function parseSources(texts: readonly string[], extension: "ts" | "tsx" = "ts"): Promise<ts.SourceFile[]> {
+  const base = "/__shore_mutate__";
+  const paths = texts.map((_text, index) => `${base}/${String(index)}.${extension}`);
+  const files = Object.fromEntries(paths.map((path, index) => [path, texts[index] ?? ""]));
+  files[`${base}/tsconfig.json`] = JSON.stringify({ files: paths, compilerOptions: { noLib: true, noResolve: true } });
+  const api = new API({ cwd: base, fs: createVirtualFileSystem(files) });
+  try {
+    const snapshot = await api.updateSnapshot({ openProjects: [`${base}/tsconfig.json`] });
+    try {
+      const project = snapshot.getProject(`${base}/tsconfig.json`);
+      if (project === undefined) throw new Error("TypeScript did not load the mutated sources");
+      const sources: ts.SourceFile[] = [];
+      for (const path of paths) {
+        const source = await project.program.getSourceFile(path);
+        if (source === undefined) throw new Error(`TypeScript did not parse ${path}`);
+        sources.push(source);
+      }
+      return sources;
+    } finally {
+      await snapshot.dispose();
+    }
+  } finally {
+    await api.close();
+  }
+}
+
 export async function allMutants(files: readonly string[]): Promise<Map<string, Mutant[]>> {
   const result = new Map<string, Mutant[]>();
   for (const extension of ["ts", "tsx"] as const) {
     const mine = files.filter((file) => file.endsWith(`.${extension}`));
     if (mine.length === 0) continue;
     const texts = mine.map((file) => readFileSync(join(ROOT, file), "utf8"));
-    const sources = await parseInventorySources(texts, extension);
+    const sources = await parseSources(texts, extension);
     mine.forEach((file, i) => {
       const source = sources[i];
       const text = texts[i];
@@ -683,6 +710,12 @@ async function main(args: readonly string[]): Promise<number> {
     return problems.length > 0 ? 1 : 0;
   }
 
+  const generated = Bun.spawnSync([process.execPath, join(ROOT, "scripts", "generate.ts")], { stdin: "ignore", stdout: "inherit", stderr: "inherit" });
+  if (generated.exitCode !== 0) {
+    console.log("problem: generating the wire types, validators and browser assets failed");
+    return 1;
+  }
+  process.env.SHORE_GENERATED = "1";
   const requested = Number(args.find((a) => a.startsWith("--workers="))?.slice("--workers=".length));
   const workers = Number.isInteger(requested) && requested > 0
     ? requested

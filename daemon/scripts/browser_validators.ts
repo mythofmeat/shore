@@ -1,5 +1,3 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { resolve } from "node:path";
 import { _ } from "ajv";
 import standaloneCode from "ajv/dist/standalone/index.js";
 import { contractValidator } from "../src/operations/validation.ts";
@@ -55,12 +53,3 @@ export function browserValidators(): Record<string, string> {
   };
 }
 
-if (import.meta.main) {
-  const root = resolve(import.meta.dir, "../src/browser");
-  await mkdir(root, { recursive: true });
-  for (const [name, source] of Object.entries(browserValidators())) {
-    const path = resolve(root, name);
-    if (process.argv.includes("--write")) await writeFile(path, source);
-    else if (await readFile(path, "utf8") !== source) throw new Error(`Stale ${name}; run bun run browser:generate`);
-  }
-}

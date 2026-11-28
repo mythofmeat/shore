@@ -28,10 +28,6 @@ jobs:
         working-directory: daemon
       - run: cargo upgrade --incompatible && cargo update
         working-directory: client
-      - run: cargo test -p shore-common export
-        working-directory: client
-      - run: bun run browser:generate && bun run browser:build
-        working-directory: daemon
       - id: pr
         uses: peter-evans/create-pull-request@v8
         with:
@@ -41,9 +37,8 @@ jobs:
           commit-message: "chore(deps): update"
           title: "chore(deps): update"
           body: |
-            Bun, every daemon package and every client crate at their latest versions, majors included,
-            with the generated files they change. The weekly workflow merges this once every check
-            on it passes, then cuts a patch release. The nightly mutation pass covers it once it is on main.
+            Bun, every daemon package and every client crate at their latest versions, majors included.
+            The weekly workflow merges this once every check on it passes, then cuts a patch release. The nightly mutation pass covers it once it is on main.
 
   merge:
     needs: update

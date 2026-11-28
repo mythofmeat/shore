@@ -45,3 +45,5 @@ __pycache__/
 contrib/arch/shore-cli/
 mutants.out/
 mutants.out.old/
+daemon/src/protocol/
+*.generated.*
