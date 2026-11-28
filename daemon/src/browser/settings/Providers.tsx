@@ -325,10 +325,8 @@ function CredentialRow({ provider, credential, index, count, open, refreshed }: 
   const keys = provider.credentials.filter((item) => item.kind === "api_key" || item.kind === "env").map((item) => item.name);
   const act = (work: () => Promise<{ message: string }>) => void run(async () => { const result = await work(); refreshed(); return result.message; });
   const move = (step: number) => {
-    const order = [...keys];
-    const [moved] = order.splice(index, 1);
-    if (moved === undefined) return;
-    order.splice(index + step, 0, moved);
+    const order = keys.filter((name) => name !== credential.name);
+    order.splice(index + step, 0, credential.name);
     act(() => workspace.actions.run("order_credentials", { provider: provider.name, order }));
   };
   const editable = credential.kind === "api_key" || credential.kind === "env";
@@ -351,44 +349,46 @@ function CredentialRow({ provider, credential, index, count, open, refreshed }: 
         ].filter(Boolean).join(" · ")}
       </span>
     </div>
-    <span className={`status-pill ${standing.tone}`}>{standing.label}</span>
-    {editable ? <div className="actions-row">
-      <button type="button" className="button ghost" disabled={busy} onClick={() => act(() => workspace.actions.run("test_credential", { provider: provider.name, credential: credential.name }).then((result) => ({ message: `${credential.name}: ${result.detail}` })))}>{busy ? "Working…" : "Test"}</button>
-      <Menu label={`Actions for ${credential.name}`} items={[
-        credential.pinned
-          ? { label: "Pick keys automatically", detail: "First that works, in order", onSelect: () => act(() => workspace.actions.run("select_credential", { provider: provider.name, credential: null })) }
-          : { label: "Use only this key", disabled: !credential.enabled, onSelect: () => act(() => workspace.actions.run("select_credential", { provider: provider.name, credential: credential.name })) },
-        { label: "Move up", disabled: index === 0, onSelect: () => move(-1) },
-        { label: "Move down", disabled: index >= count - 1, onSelect: () => move(1) },
-        "separator",
-        credential.enabled
-          ? { label: "Disable", onSelect: () => act(() => workspace.actions.run("update_credential", { provider: provider.name, credential: credential.name, enabled: false })) }
-          : { label: "Enable", onSelect: () => act(() => workspace.actions.run("update_credential", { provider: provider.name, credential: credential.name, enabled: true })) },
-        { label: credential.limit === null ? "Set a spending limit…" : "Change spending limit…", onSelect: () => open({ kind: "limit", credential }) },
-        { label: "Rename…", onSelect: () => open({ kind: "rename", credential }) },
-        ...(credential.kind === "api_key" ? [{ label: "Replace key…", onSelect: () => open({ kind: "replace", credential }) }] : []),
-        "separator",
-        { label: "Remove…", danger: true, onSelect: () => open({ kind: "remove", credential }) },
-      ]} />
-    </div> : null}
-    {login ? <div className="actions-row">
-      {credential.standing === "signed_out"
-        ? <button type="button" className="button" onClick={() => open({ kind: "sign-in-again", credential })}>Sign in</button>
-        : <button type="button" className="button ghost" disabled={busy} onClick={() => act(() => workspace.actions.run("test_credential", { provider: provider.name, credential: credential.name }).then((result) => ({ message: `${credential.name}: ${result.detail}` })))}>{busy ? "Working…" : "Check"}</button>}
-      <Menu label={`Actions for ${credential.name}`} items={[
-        credential.pinned
-          ? { label: "Pick logins automatically", detail: "One with room, whose week resets soonest", onSelect: () => act(() => workspace.actions.run("select_credential", { provider: provider.name, credential: null })) }
-          : { label: "Use only this login", disabled: !credential.enabled || credential.standing === "signed_out", onSelect: () => act(() => workspace.actions.run("select_credential", { provider: provider.name, credential: credential.name })) },
-        { label: "Set limits…", onSelect: () => open({ kind: "login-limit", credential }) },
-        { label: "Sign in again…", onSelect: () => open({ kind: "sign-in-again", credential }) },
-        ...(credential.name === "subscription" ? [] : [{ label: "Rename…", onSelect: () => open({ kind: "rename", credential }) }]),
-        "separator",
-        credential.enabled
-          ? { label: "Disable", onSelect: () => act(() => workspace.actions.run("update_credential", { provider: provider.name, credential: credential.name, enabled: false })) }
-          : { label: "Enable", onSelect: () => act(() => workspace.actions.run("update_credential", { provider: provider.name, credential: credential.name, enabled: true })) },
-        ...(credential.name === "subscription" ? [] : ["separator" as const, { label: "Remove…", danger: true, onSelect: () => open({ kind: "remove", credential }) }]),
-      ]} />
-    </div> : null}
+    <div className="actions-row tight">
+      <span className={`status-pill ${standing.tone}`}>{standing.label}</span>
+      {editable ? <>
+        <button type="button" className="button ghost" disabled={busy} onClick={() => act(() => workspace.actions.run("test_credential", { provider: provider.name, credential: credential.name }).then((result) => ({ message: `${credential.name}: ${result.detail}` })))}>{busy ? "Working…" : "Test"}</button>
+        <Menu label={`Actions for ${credential.name}`} items={[
+          credential.pinned
+            ? { label: "Pick keys automatically", description: "First that works, in order", onSelect: () => act(() => workspace.actions.run("select_credential", { provider: provider.name, credential: null })) }
+            : { label: "Use only this key", disabled: !credential.enabled, onSelect: () => act(() => workspace.actions.run("select_credential", { provider: provider.name, credential: credential.name })) },
+          { label: "Move up", disabled: index === 0, onSelect: () => move(-1) },
+          { label: "Move down", disabled: index >= count - 1, onSelect: () => move(1) },
+          "separator",
+          credential.enabled
+            ? { label: "Disable", onSelect: () => act(() => workspace.actions.run("update_credential", { provider: provider.name, credential: credential.name, enabled: false })) }
+            : { label: "Enable", onSelect: () => act(() => workspace.actions.run("update_credential", { provider: provider.name, credential: credential.name, enabled: true })) },
+          { label: credential.limit === null ? "Set a spending limit…" : "Change spending limit…", onSelect: () => open({ kind: "limit", credential }) },
+          { label: "Rename…", onSelect: () => open({ kind: "rename", credential }) },
+          ...(credential.kind === "api_key" ? [{ label: "Replace key…", onSelect: () => open({ kind: "replace", credential }) }] : []),
+          "separator",
+          { label: "Remove…", danger: true, onSelect: () => open({ kind: "remove", credential }) },
+        ]} />
+      </> : null}
+      {login ? <>
+        {credential.standing === "signed_out"
+          ? <button type="button" className="button" onClick={() => open({ kind: "sign-in-again", credential })}>Sign in</button>
+          : <button type="button" className="button ghost" disabled={busy} onClick={() => act(() => workspace.actions.run("test_credential", { provider: provider.name, credential: credential.name }).then((result) => ({ message: `${credential.name}: ${result.detail}` })))}>{busy ? "Working…" : "Check"}</button>}
+        <Menu label={`Actions for ${credential.name}`} items={[
+          credential.pinned
+            ? { label: "Pick logins automatically", description: "One with room, whose week resets soonest", onSelect: () => act(() => workspace.actions.run("select_credential", { provider: provider.name, credential: null })) }
+            : { label: "Use only this login", disabled: !credential.enabled || credential.standing === "signed_out", onSelect: () => act(() => workspace.actions.run("select_credential", { provider: provider.name, credential: credential.name })) },
+          { label: "Set limits…", onSelect: () => open({ kind: "login-limit", credential }) },
+          { label: "Sign in again…", onSelect: () => open({ kind: "sign-in-again", credential }) },
+          ...(credential.name === "subscription" ? [] : [{ label: "Rename…", onSelect: () => open({ kind: "rename", credential }) }]),
+          "separator",
+          credential.enabled
+            ? { label: "Disable", onSelect: () => act(() => workspace.actions.run("update_credential", { provider: provider.name, credential: credential.name, enabled: false })) }
+            : { label: "Enable", onSelect: () => act(() => workspace.actions.run("update_credential", { provider: provider.name, credential: credential.name, enabled: true })) },
+          ...(credential.name === "subscription" ? [] : ["separator" as const, { label: "Remove…", danger: true, onSelect: () => open({ kind: "remove", credential }) }]),
+        ]} />
+      </> : null}
+    </div>
   </li>;
 }
 
@@ -434,7 +434,7 @@ function ProviderCard({ state, provider, sdks, refreshed }: { state: ChromeSnaps
         <span className="setting-label">{provider.name}</span>
         <span className="setting-description">{provider.sdk}{provider.base_url === null ? "" : ` · ${provider.base_url}`}</span>
       </div>
-      <div className="actions-row">
+      <div className="actions-row tight">
         <span className={`status-pill ${!provider.enabled ? "off" : usable ? "ok" : "warn"}`}>{!provider.enabled ? "Disabled" : usable ? "Ready" : logins ? "Not signed in" : "No working key"}</span>
         <Menu label={`Actions for ${provider.name}`} items={[
           { label: "Settings…", onSelect: () => setEditing(true) },
