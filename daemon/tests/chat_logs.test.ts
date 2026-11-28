@@ -17,6 +17,9 @@ import { required } from "../src/util/required.ts";
 import { handlesUnder } from "./support/handles.ts";
 import { outcomeOf } from "./support/outcome.ts";
 import { testTmp } from "./support/tmp.ts";
+import { Texts } from "../src/texts/texts.ts";
+import { schemaViolation } from "../src/tools/validate.ts";
+import { BUILTIN_TOOL_SCHEMAS } from "./support/builtin_tool_schemas.ts";
 
 const NOW = "2026-11-05T10:00:00Z";
 
@@ -51,7 +54,7 @@ async function world(...threads: string[]): Promise<World> {
     else await createThread(data, "frank", thread, NOW);
   }
   const dbPath = join(data, HISTORY_DB_FILE);
-  const options: ChatLogOptions = { character: "frank", dbPath, dataDir: data, thread: "main", indexPath: join(root, "cache", "chat_logs.db"), timeZone: "UTC", userName: "sam" };
+  const options: ChatLogOptions = { texts: new Texts(), character: "frank", dbPath, dataDir: data, thread: "main", indexPath: join(root, "cache", "chat_logs.db"), timeZone: "UTC", userName: "sam" };
   return {
     data,
     options,
@@ -391,7 +394,7 @@ describe("listing a character's archived conversations", () => {
 
   test("says there are none before anything is archived, and counts one as one", async () => {
     const root = testTmp(`chat-logs-list-${crypto.randomUUID()}`);
-    const options: ChatLogOptions = { character: "frank", dbPath: join(root, "data", HISTORY_DB_FILE), dataDir: join(root, "data"), timeZone: "UTC" };
+    const options: ChatLogOptions = { texts: new Texts(), character: "frank", dbPath: join(root, "data", HISTORY_DB_FILE), dataDir: join(root, "data"), timeZone: "UTC" };
     expect(await handleChatLogs({ action: "list" }, join(root, "data", "frank"), options)).toBe("No archived conversations.");
     expect(existsSync(options.dbPath)).toBe(false);
     const w = await world();
@@ -422,6 +425,6 @@ describe("listing a character's archived conversations", () => {
     const w = await world();
     expect(await outcomeOf(w.ask({ action: "list", overview: "2026-11-01" }))).toThrow("invalid args: `overview` goes with `read`, not `list`");
     expect(await outcomeOf(w.ask({ action: "list", limit: -1 }))).toThrow("invalid args: limit must be a whole number, 0 or more");
-    expect(await outcomeOf(w.ask({ action: "list", thread: 3 }))).toThrow("invalid args: thread must be a string");
+    expect(schemaViolation(new Texts(), BUILTIN_TOOL_SCHEMAS.get("chat_logs"), { action: "list", thread: 3 })).toBe("argument `thread` must be a string");
   });
 });

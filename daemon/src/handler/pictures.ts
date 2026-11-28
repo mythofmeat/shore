@@ -4,7 +4,7 @@ import { embedsIn, type Embed } from "../engine/embeds.ts";
 import type { ContentBlock, ImageRef } from "../engine/types.ts";
 import { isSentVideo, keepSentPicture, keepSentVideo, shownPicturePath } from "../storage/sent_pictures.ts";
 import type { CharacterWorkspace } from "../tools/character_workspace.ts";
-import { CANNOT_BE_SENT, type PictureLookup } from "../tools/message_pictures.ts";
+import type { PictureLookup } from "../tools/message_pictures.ts";
 import type { NotificationPicture } from "../notifications.ts";
 import { imageMime } from "../tools/read_image.ts";
 import { videoMime } from "../tools/video.ts";
@@ -16,7 +16,9 @@ export interface PictureSender {
   dir: string;
 }
 
-const TOO_MANY = `only the first ${String(MAX_SENT_PICTURES)} pictures in a message are sent`;
+function tooMany(workspace: CharacterWorkspace): { problem: string } {
+  return { problem: workspace.texts.always("picture_send_too_many", { count: String(MAX_SENT_PICTURES) }) };
+}
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -38,7 +40,7 @@ function messageEmbeds(texts: readonly string[]): Embed[] {
 async function lookUp(embeds: readonly Embed[], workspace: CharacterWorkspace, signal?: AbortSignal): Promise<PictureLookup[]> {
   const wanted = embeds.slice(0, MAX_SENT_PICTURES);
   if (wanted.length === 0) return [];
-  return await workspace.call("pictures", { workspaceDir: workspace.dir, targets: wanted.map(({ target, wikilink }) => ({ target, wikilink })) }, signal);
+  return await workspace.call("pictures", { workspaceDir: workspace.dir, targets: wanted.map(({ target, wikilink }) => ({ target, wikilink })), texts: workspace.texts.overrides() }, signal);
 }
 
 function unsent(embed: Embed, problem: string): ImageRef {
@@ -58,14 +60,14 @@ async function firstFrame(path: string, sender: PictureSender, signal?: AbortSig
 async function keepBytes(path: string, bytes: Buffer, sender: PictureSender, signal?: AbortSignal): Promise<string> {
   const video = videoMime(bytes);
   if (video !== undefined) return await keepSentVideo(sender.dir, bytes, video, async () => await firstFrame(path, sender, signal));
-  const mime = imageMime(bytes.subarray(0, 12));
-  if (mime === undefined) throw new Error(CANNOT_BE_SENT);
+  const mime = imageMime(bytes);
+  if (mime === undefined) throw new Error(sender.workspace.texts.always("picture_send_type"));
   return await keepSentPicture(sender.dir, bytes, mime);
 }
 
 async function keep(embed: Embed, path: string, sender: PictureSender, signal?: AbortSignal): Promise<ImageRef> {
   const [read] = await sender.workspace.call("readFiles", { paths: [path] }, signal);
-  if (read === undefined || "error" in read) throw new Error(read?.error.message ?? "it could not be read");
+  if (read === undefined || "error" in read) throw new Error(read?.error.message ?? sender.workspace.texts.always("picture_send_unreadable"));
   const bytes = Buffer.from(read.data, "base64");
   return {
     path: await keepBytes(path, bytes, sender, signal),
@@ -82,11 +84,11 @@ export async function sendPictures(texts: readonly string[], sender: PictureSend
     lookups = await lookUp(embeds, sender.workspace, signal);
   } catch (error) {
     signal?.throwIfAborted();
-    lookups = embeds.map(() => ({ problem: `the workspace could not be searched: ${message(error)}` }));
+    lookups = embeds.map(() => ({ problem: sender.workspace.texts.always("picture_send_unsearched", { error: message(error) }) }));
   }
   const images: ImageRef[] = [];
   for (const [index, embed] of embeds.entries()) {
-    const found = index < MAX_SENT_PICTURES ? lookups[index] : { problem: TOO_MANY };
+    const found = index < MAX_SENT_PICTURES ? lookups[index] : tooMany(sender.workspace);
     if (found === null || found === undefined) continue;
     if ("problem" in found) {
       images.push(unsent(embed, found.problem));
@@ -96,7 +98,7 @@ export async function sendPictures(texts: readonly string[], sender: PictureSend
       images.push(await keep(embed, found.path, sender, signal));
     } catch (error) {
       signal?.throwIfAborted();
-      images.push(unsent(embed, `it could not be sent: ${message(error)}`));
+      images.push(unsent(embed, sender.workspace.texts.always("picture_send_failed", { error: message(error) })));
     }
   }
   return images;
@@ -106,8 +108,8 @@ export async function pictureProblems(texts: readonly string[], workspace: Chara
   const embeds = messageEmbeds(texts);
   const lookups = await lookUp(embeds, workspace, signal);
   return embeds.flatMap((embed, index) => {
-    const found = index < MAX_SENT_PICTURES ? lookups[index] : { problem: TOO_MANY };
-    return found !== null && found !== undefined && "problem" in found ? [`${embed.source}: ${found.problem}`] : [];
+    const found = index < MAX_SENT_PICTURES ? lookups[index] : tooMany(workspace);
+    return found !== null && found !== undefined && "problem" in found ? [workspace.texts.always("picture_send_problem", { picture: embed.source, problem: found.problem })] : [];
   });
 }
 

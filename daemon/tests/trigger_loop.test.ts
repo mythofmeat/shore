@@ -8,6 +8,7 @@ import { CharacterTriggers, type TriggerSettings } from "../src/autonomy/trigger
 import { triggerTimes } from "../src/autonomy/triggers.ts";
 import { writeCharacterState } from "../src/storage/store.ts";
 import { testTmp } from "./support/tmp.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -59,6 +60,7 @@ async function world(file: string | undefined, dir?: string): Promise<World> {
         if (w.unreadable) throw new Error("permission denied");
         return w.file;
       },
+      texts: () => new Texts(),
       runCheck: async (trigger, limitMs, statusesSeen) => {
         w.ran.push([trigger.name, limitMs]);
         w.handed.push([trigger.name, statusesSeen]);

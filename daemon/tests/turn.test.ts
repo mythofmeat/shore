@@ -20,6 +20,7 @@ import { initializeDatabase } from "../src/storage/database.ts";
 import { threadFile } from "../src/storage/files.ts";
 import { closeStorageConnections } from "../src/storage/store.ts";
 import { handlesUnder } from "./support/handles.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 const MINTED_ID = "m_00000000-0000-4000-8000-000000000000";
 const MINTED_TS = "2026-01-01T00:00:00-05:00";
@@ -86,9 +87,9 @@ describe("appendUserTurn", () => {
       const saved: number[] = [];
       const ctx: TurnContext = { ...rec.ctx, accepted: async () => { saved.push((await ConversationEngine.load("ada", dataDir)).messages().length); } };
       const engine = await ConversationEngine.load("ada", dataDir);
-      await appendUserTurn(ctx, engine, dataDir, "ada", { text: "", images: [], image_data: [] }, false, "empty");
-      await appendUserTurn(ctx, engine, dataDir, "ada", { text: "hello", images: [], image_data: [] }, false, "send-1");
-      await appendUserTurn(ctx, engine, dataDir, "ada", { text: "", images: [], image_data: [] }, true, "regen-1");
+      await appendUserTurn(ctx, engine, dataDir, "ada", { text: "", images: [], image_data: [] }, false, new Texts(), "empty");
+      await appendUserTurn(ctx, engine, dataDir, "ada", { text: "hello", images: [], image_data: [] }, false, new Texts(), "send-1");
+      await appendUserTurn(ctx, engine, dataDir, "ada", { text: "", images: [], image_data: [] }, true, new Texts(), "regen-1");
       expect(saved).toEqual([1]);
     } finally {
       await rm(root, { recursive: true, force: true });

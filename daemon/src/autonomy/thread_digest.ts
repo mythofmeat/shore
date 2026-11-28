@@ -17,9 +17,9 @@ const DIGEST_MAX_CHARS = 24_000;
 const DIGEST_MESSAGE_CHARS = 4_000;
 const SEGMENTS_READ = 3;
 
-function spoken(message: Message): string | undefined {
+function spoken(message: Message, texts: Texts): string | undefined {
   if (message.role === "system" || isToolResultOnly(message) || isAutonomousNote(message)) return undefined;
-  const text = messageText(message).trim();
+  const text = messageText(message, texts).trim();
   return text === "" ? undefined : text;
 }
 
@@ -37,7 +37,7 @@ function wakeWorking(messages: readonly Message[]): Set<string> {
   return working;
 }
 
-async function saidIn(thread: ThreadReader, since: number | undefined): Promise<Message[]> {
+async function saidIn(texts: Texts, thread: ThreadReader, since: number | undefined): Promise<Message[]> {
   const seen = new Set<string>();
   let examined: Message[] = [];
   const take = (messages: readonly Message[]): void => {
@@ -47,7 +47,7 @@ async function saidIn(thread: ThreadReader, since: number | undefined): Promise<
   };
   const said = (): Message[] => {
     const working = wakeWorking(examined);
-    return examined.filter((message) => spoken(message) !== undefined && !working.has(message.msg_id) && (since === undefined || timeOf(message) > since));
+    return examined.filter((message) => spoken(message, texts) !== undefined && !working.has(message.msg_id) && (since === undefined || timeOf(message) > since));
   };
   const enough = (): boolean => since === undefined
     ? said().length >= FIRST_WAKE_MESSAGES
@@ -72,7 +72,7 @@ function cut(texts: Texts, text: string): string {
 function entry(texts: Texts, message: Message, userName: string, timeZone: string): string | undefined {
   const speaker = message.role === "user" ? "digest_user" : message.origin === "autonomous" ? "digest_you_wake" : "digest_you";
   const at = timeOf(message);
-  return texts.render(speaker, { user: userName, at: Number.isNaN(at) ? undefined : formatWallClock(at, timeZone), text: cut(texts, spoken(message) ?? "") });
+  return texts.render(speaker, { user: userName, at: Number.isNaN(at) ? undefined : formatWallClock(at, timeZone), text: cut(texts, spoken(message, texts) ?? "") });
 }
 
 export async function threadDigest(
@@ -82,7 +82,7 @@ export async function threadDigest(
   userName: string,
   timeZone: string,
 ): Promise<string | undefined> {
-  const messages = await saidIn(thread, since);
+  const messages = await saidIn(texts, thread, since);
   if (messages.length === 0) return texts.render(since === undefined ? "digest_nothing_yet" : "digest_nothing_since");
   const shown: string[] = [];
   let used = 0;

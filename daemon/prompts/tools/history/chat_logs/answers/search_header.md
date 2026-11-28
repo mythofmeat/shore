@@ -1,0 +1,1 @@
+{{query}}{{#if substring}} (substring){{/if}}: {{count}} {{#if one}}match{{else}}matches{{/if}}{{#if scope}} {{scope}}{{/if}}{{#if older}} in the last {{months}} months ({{older}} older){{/if}}, {{shown}}, {{sort}}

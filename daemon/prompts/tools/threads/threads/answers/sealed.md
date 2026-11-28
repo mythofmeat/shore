@@ -1,0 +1,1 @@
+Sealed the thread "{{name}}" ({{label}}) until {{opens}}. {{user}} can't see it until then, and your other turns are shown only its label and that time. `wake_in_thread` takes you into it. Keep what you make for it in {{folder}}, which is outside your workspace.

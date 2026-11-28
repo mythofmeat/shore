@@ -83,7 +83,7 @@ test("cancelling generation reaches an in-flight MCP tool", async () => {
   h.config.app.tools.enabled = [TOOL];
   const parent = new AbortController();
   let observed: AbortSignal | undefined;
-  const mcp = { call: async (_name: string, _input: unknown, signal?: AbortSignal) => {
+  const mcp = { call: async (_name: string, _input: unknown, _texts: unknown, signal?: AbortSignal) => {
     observed = signal;
     parent.abort();
     await new Promise((resolve) => { setTimeout(resolve, 20); });

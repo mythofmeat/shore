@@ -20,4 +20,17 @@ server.registerTool("cancel_late", {
   await appendFile(marker, "finished despite cancellation\n");
   return { content: [{ type: "text", text: "Effect committed" }] };
 });
+server.registerTool("every_kind", {
+  description: "Return one block of every kind Shore turns into a note.", inputSchema: {},
+}, () => ({ content: [
+  { type: "text" as const, text: "said" },
+  { type: "audio" as const, data: "AAAA", mimeType: "audio/wav" },
+  { type: "image" as const, data: "AAAA", mimeType: "image/bmp" },
+  { type: "resource" as const, resource: { uri: "file:///notes.txt", text: "the notes" } },
+  { type: "resource" as const, resource: { uri: "file:///song.ogg", blob: "AAAA", mimeType: "audio/ogg" } },
+  { type: "resource_link" as const, uri: "file:///map.png", name: "map", mimeType: "image/png" },
+] }));
+server.registerTool("fails", {
+  description: "Fail with words and a sound.", inputSchema: {},
+}, () => ({ isError: true, content: [{ type: "text" as const, text: "it broke" }, { type: "audio" as const, data: "AAAA", mimeType: "audio/wav" }] }));
 await server.connect(new StdioServerTransport());

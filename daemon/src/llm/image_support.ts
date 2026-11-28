@@ -6,7 +6,8 @@ import path from "node:path";
 import type { ContentBlock } from "../engine/types.ts";
 import { makeProviderCacheFolderSync, providerCacheDir } from "../storage/provider_cache.ts";
 import { describeError } from "./errors.ts";
-import { omissionNotice } from "./images.ts";
+import { unnamedOmission, type ImagePlace, type Omission } from "./images.ts";
+import type { Texts } from "../texts/texts.ts";
 import { toolResultImages, type WireMessage } from "./types.ts";
 
 const LEARNED_VERSION = 1;
@@ -137,17 +138,18 @@ export interface StripOutcome {
 }
 
 export function stripImageBlocks(
+  texts: Texts,
   messages: readonly WireMessage[],
-  reason: string,
+  omission: Omission,
   dropOldest = Number.POSITIVE_INFINITY,
 ): StripOutcome {
   const images = messages.flatMap((message) => message.content.flatMap(imagesOf));
   const kept = images.map((_, i) => i >= dropOldest);
   let stripped = 0;
   let position = 0;
-  const notice = (label: string): ContentBlock => {
+  const notice = (place: ImagePlace): ContentBlock[] => {
     stripped += 1;
-    return { type: "text", text: omissionNotice(label, reason) };
+    return unnamedOmission(texts, place, omission);
   };
 
   const out = messages.map((message) => {
@@ -156,15 +158,15 @@ export function stripImageBlocks(
     if (kept.slice(start, position).every(Boolean)) return message;
     let next = start;
     const drops = (b: ContentBlock): boolean => b.type === "image" && !kept[next++];
-    const content: ContentBlock[] = message.content.map((block) => {
-      if (block.type === "image") return drops(block) ? notice("an attached image") : block;
-      if (block.type !== "tool_result" || !Array.isArray(block.content)) return block;
+    const content: ContentBlock[] = message.content.flatMap((block) => {
+      if (block.type === "image") return drops(block) ? notice("image_in_message") : [block];
+      if (block.type !== "tool_result" || !Array.isArray(block.content)) return [block];
       const dropped = block.content.map(drops);
-      return {
+      return [{
         ...block,
         is_error: dropped.some(Boolean) || block.is_error === true,
-        content: block.content.map((b, i) => (dropped[i] === true ? notice("a tool result image") : b)),
-      };
+        content: block.content.flatMap((b, i) => (dropped[i] === true ? notice("image_in_tool_result") : [b])),
+      }];
     });
     return { ...message, content };
   });
@@ -176,7 +178,7 @@ export const MAX_REQUEST_IMAGE_BASE64_CHARS = 20_000_000;
 export const REQUEST_IMAGE_DROP_STEP = 50;
 const REQUEST_IMAGE_DROP_STEP_CHARS = 10_000_000;
 
-export function capRequestImages(messages: readonly WireMessage[]): StripOutcome {
+export function capRequestImages(texts: Texts, messages: readonly WireMessage[]): StripOutcome {
   const sizes = messages.flatMap((message) => message.content.flatMap(imagesOf)).map((image) => image.source.data.length);
   const target = Math.ceil((sizes.reduce((total, size) => total + size, 0) - MAX_REQUEST_IMAGE_BASE64_CHARS) / REQUEST_IMAGE_DROP_STEP_CHARS) * REQUEST_IMAGE_DROP_STEP_CHARS;
   let dropped = 0;
@@ -187,12 +189,13 @@ export function capRequestImages(messages: readonly WireMessage[]): StripOutcome
     count += 1;
   }
   return stripImageBlocks(
+    texts,
     messages,
-    `only the newest ${String(MAX_REQUEST_IMAGES)} images, up to ${String(MAX_REQUEST_IMAGE_BASE64_CHARS)} base64 characters in total, are sent per request; older ones are dropped in batches`,
+    { reason: "image_request_cap", values: { images: String(MAX_REQUEST_IMAGES), chars: String(MAX_REQUEST_IMAGE_BASE64_CHARS) } },
     Math.max(Math.ceil((sizes.length - MAX_REQUEST_IMAGES) / REQUEST_IMAGE_DROP_STEP) * REQUEST_IMAGE_DROP_STEP, count),
   );
 }
 
-export function textOnlyReason(providerKey: string, modelId: string): string {
-  return `${providerKey}/${modelId} does not accept images`;
+export function textOnlyReason(providerKey: string, modelId: string): Omission {
+  return { reason: "image_text_only", values: { model: `${providerKey}/${modelId}` } };
 }

@@ -19,6 +19,7 @@ import { conversationManager } from "../memory/compaction/archive.ts";
 import { tryBeginCompaction } from "../memory/compaction/manager.ts";
 import { join } from "node:path";
 import type { CharacterWorkspace } from "../tools/character_workspace.ts";
+import type { Texts } from "../texts/texts.ts";
 import { emitNewMessageEvent } from "./persistence.ts";
 import { ingestImages, type ImageUpload } from "./images.ts";
 import { DEFAULT_IMAGE_SETTINGS, type ImageSettings } from "../llm/image_settings.ts";
@@ -72,6 +73,7 @@ export async function appendUserTurn(
   charName: string,
   body: TurnBody,
   regen: boolean,
+  texts: Texts,
   rid: string | null = null,
   uploadSettings: Readonly<ImageSettings> = DEFAULT_IMAGE_SETTINGS,
   annotations: Pick<Message, "last_elsewhere" | "wake_running" | "presence"> = {},
@@ -80,6 +82,7 @@ export async function appendUserTurn(
   if (!bodyHasContent(body)) return undefined;
 
   const { images, blocks } = await ingestImages(
+    texts,
     cacheDir,
     charName,
     body.images,

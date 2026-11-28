@@ -10,8 +10,6 @@ export type TextSettings = Readonly<Record<string, TextSetting | undefined>>;
 
 export type TextValues = Readonly<Record<string, string | undefined>>;
 
-export type Whose = "shore" | "yours" | "off";
-
 export interface TextsSource {
   app: { texts: TextSettings };
   dirs: { config: string };
@@ -33,21 +31,16 @@ export function readTextFile(name: string, path: string): string {
   return raw.endsWith("\n") ? raw.slice(0, -1) : raw;
 }
 
+export type TextOverrides = Readonly<Record<string, string | null>>;
+
 export class Texts {
   readonly #wording = new Map<string, string | undefined>();
-  readonly #files = new Map<string, string>();
 
   constructor(settings: TextSettings = {}, configDir = "") {
     for (const [name, setting] of Object.entries(settings)) {
       if (setting === undefined) continue;
       textSpec(name);
-      if (setting === false) {
-        this.#wording.set(name, undefined);
-        continue;
-      }
-      const path = resolve(configDir, setting);
-      this.#files.set(name, path);
-      this.#wording.set(name, readTextFile(name, path));
+      this.#wording.set(name, setting === false ? undefined : readTextFile(name, resolve(configDir, setting)));
     }
   }
 
@@ -55,14 +48,17 @@ export class Texts {
     return new Texts(source.app.texts, source.dirs.config);
   }
 
-  whose(name: string): Whose {
-    textSpec(name);
-    if (this.#files.has(name)) return "yours";
-    return this.#wording.has(name) ? "off" : "shore";
+  static from(overrides: TextOverrides): Texts {
+    const texts = new Texts();
+    for (const [name, wording] of Object.entries(overrides)) {
+      textSpec(name);
+      texts.#wording.set(name, wording ?? undefined);
+    }
+    return texts;
   }
 
-  file(name: string): string | undefined {
-    return this.#files.get(name);
+  overrides(): TextOverrides {
+    return Object.fromEntries([...this.#wording].map(([name, wording]) => [name, wording ?? null]));
   }
 
   wording(name: string): string | undefined {
@@ -83,5 +79,19 @@ export class Texts {
     const rendered = this.render(name, values);
     if (rendered === undefined) throw new Error(`text "${name}" came out empty, and Shore can't leave it out`);
     return rendered;
+  }
+}
+
+let resolveCharacterTexts: (character: string) => Texts = () => new Texts();
+
+export function useCharacterTexts(lookUp: (character: string) => Texts): void {
+  resolveCharacterTexts = lookUp;
+}
+
+export function characterTexts(character: string): Texts {
+  try {
+    return resolveCharacterTexts(character);
+  } catch {
+    return new Texts();
   }
 }

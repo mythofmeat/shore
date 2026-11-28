@@ -108,10 +108,12 @@ export async function prepareLabelCall(
   const resolved = required(resolveChatModelForCharacter(view, character, find, options.model ?? await threadChatModel(effective.dirs.data, character, thread)));
   const model = toRequestModel(resolved);
   const entry = effective.providers.get(resolved.providerKey);
-  const prompt = Texts.of(effective).always("label", { ...names, cut: conversation.cut ? "yes" : undefined }).trim();
+  const texts = Texts.of(effective);
+  const prompt = texts.always("label", { ...names, cut: conversation.cut ? "yes" : undefined }).trim();
   const { reasoning_budget_tokens: _budget, cache_ttl: _ttl, ...unthinking } = model;
   const shortCache = acceptsCacheTtl(model.sdk, model.model_id) ? { cache_ttl: LABEL_CACHE_TTL } : {};
   const { request } = buildRequestWithProviderKeys(model, entry === undefined ? undefined : credentialEntry(entry), {
+    texts,
     messages: [{ role: "user", content: [{ type: "text", text: conversation.text }, { type: "text", text: prompt }] }],
     providerOptions: required(providerOptionsFor({ ...unthinking, ...shortCache, reasoning_effort: REASONING_OFF })),
     replay: "none",

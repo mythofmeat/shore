@@ -124,6 +124,7 @@ export class TriggerService {
         if (ABSENT.has(read.error.code ?? "")) return undefined;
         throw new Error(read.error.message);
       },
+      texts: () => characterWorkspace(config(), character).texts,
       runCheck: async (trigger, limitMs, statusesSeen) => {
         const now = this.#now();
         const stats = autonomy.activityStats(character, localWallClock(now));

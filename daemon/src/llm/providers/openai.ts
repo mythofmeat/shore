@@ -18,7 +18,8 @@ import {
   nanogptPromptCaching,
   placeNanogptBreakpoints,
 } from "./nanogpt_config.ts";
-import { type ResolvedImage, resolveImageBlock, omissionNotice } from "../images.ts";
+import { type ImagePlace, type ResolvedImage, resolveImageBlock, requestTexts, unnamedOmission } from "../images.ts";
+import { Texts } from "../../texts/texts.ts";
 import type {
   GenerateResponse,
   SidecarProvider,
@@ -32,6 +33,7 @@ import { systemToText, toolResultImages, toolResultText, toTurn } from "../types
 import { replayableMessages } from "../replay.ts";
 import { foldInlineSystemMessagesWithTail, translatesToAnthropic } from "../inline_system.ts";
 import { parseToolArgs } from "../tool_args.ts";
+import { required } from "../../util/required.ts";
 
 export class OpenAIProvider implements SidecarProvider {
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
@@ -200,15 +202,15 @@ export function buildOpenAIMessagesWithTail(req: SidecarRequest): OpenAIMessages
     : { turns: replayable, transientTail: replayable.map((turn) => turn.transient_tail ?? 0) };
 
   const toolNames = new Map<string, string>();
-  folded.turns.forEach((turn, i) => {
+  const texts = requestTexts(req);
+  for (const [turn, tail] of folded.turns.map((each, i) => [each, folded.transientTail[i]] as const)) {
     for (const block of turn.content) if (block.type === "tool_use") toolNames.set(block.id, block.name);
-    const emitted = turnToOpenAI(toTurn(turn), toolNames);
+    const emitted = turnToOpenAI(toTurn(turn), toolNames, texts);
     emitted.forEach((m, j) => {
       messages.push(m);
-      const foldedBlocksLandHere = j === emitted.length - 1 && m.role === "user";
-      transientTail.push(foldedBlocksLandHere ? (folded.transientTail[i] ?? 0) : 0);
+      transientTail.push(j === emitted.length - 1 && m.role === "user" ? required(tail) : 0);
     });
-  });
+  }
 
   return { messages, transientTail };
 }
@@ -286,7 +288,7 @@ function toOpenAITools(tools: ToolDefinition[] | undefined): ChatCompletionTool[
   }));
 }
 
-export function turnToOpenAI(turn: TurnMessage, toolNames: ReadonlyMap<string, string> = new Map()): ChatCompletionMessageParam[] {
+export function turnToOpenAI(turn: TurnMessage, toolNames: ReadonlyMap<string, string> = new Map(), texts: Texts = new Texts()): ChatCompletionMessageParam[] {
   if (turn.role === "system") {
     const text = turn.content
       .filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text")
@@ -333,24 +335,13 @@ export function turnToOpenAI(turn: TurnMessage, toolNames: ReadonlyMap<string, s
       };
       out.push(toolMsg);
       const images = toolResultImages(b.content);
-      if (images.length > 0) parts.push({ type: "text", text: `Images from tool ${toolNames.get(b.tool_use_id) ?? "result"} (tool_call_id: ${b.tool_use_id}):` });
-      for (const image of images) {
-        const resolution = resolveImageBlock(image.source);
-        if ("omitted" in resolution) {
-          parts.push({ type: "text", text: omissionNotice("a tool result image", resolution.omitted) });
-        } else {
-          parts.push(imageUrlPart(resolution.image));
-        }
-      }
+      const label = images.length > 0 ? texts.render("image_from_tool", { tool: toolNames.get(b.tool_use_id), id: b.tool_use_id }) : undefined;
+      if (label !== undefined) parts.push({ type: "text", text: label });
+      for (const image of images) parts.push(...imagePart(texts, image.source, "image_in_tool_result"));
     } else if (b.type === "text") {
       parts.push({ type: "text", text: b.text });
     } else if (b.type === "image") {
-      const resolution = resolveImageBlock(b.source);
-      if ("omitted" in resolution) {
-        parts.push({ type: "text", text: omissionNotice("an attached image", resolution.omitted) });
-      } else {
-        parts.push(imageUrlPart(resolution.image));
-      }
+      parts.push(...imagePart(texts, b.source, "image_in_message"));
     }
   }
   if (parts.length > 0) {
@@ -361,6 +352,11 @@ export function turnToOpenAI(turn: TurnMessage, toolNames: ReadonlyMap<string, s
 
 type OpenAITextPart = { type: "text"; text: string };
 type OpenAIImagePart = { type: "image_url"; image_url: { url: string } };
+
+function imagePart(texts: Texts, source: Parameters<typeof resolveImageBlock>[0], place: ImagePlace): Array<OpenAITextPart | OpenAIImagePart> {
+  const resolution = resolveImageBlock(source);
+  return "omitted" in resolution ? unnamedOmission(texts, place, resolution.omitted) as OpenAITextPart[] : [imageUrlPart(resolution.image)];
+}
 
 function imageUrlPart(resolved: ResolvedImage): OpenAIImagePart {
   return {

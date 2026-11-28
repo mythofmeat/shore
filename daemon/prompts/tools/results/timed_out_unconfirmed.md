@@ -1,0 +1,1 @@
+timed out after {{seconds}}s. Shore asked it to stop and it has not confirmed that it did, so it may still be running and may still take effect. Do not repeat this call until you have checked whether the first one already ran.

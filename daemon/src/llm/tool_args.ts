@@ -1,6 +1,7 @@
 export interface ParsedToolArgs {
   input: unknown;
   input_error?: string;
+  input_length?: number;
 }
 
 export function parseToolArgs(argsJson: string): ParsedToolArgs {
@@ -9,10 +10,6 @@ export function parseToolArgs(argsJson: string): ParsedToolArgs {
   try {
     return { input: JSON.parse(trimmed) };
   } catch (e) {
-    const why = e instanceof Error ? e.message : String(e);
-    return {
-      input: {},
-      input_error: `the arguments were not valid JSON (${why}); ${String(trimmed.length)} characters arrived`,
-    };
+    return { input: {}, input_error: e instanceof Error ? e.message : String(e), input_length: trimmed.length };
   }
 }

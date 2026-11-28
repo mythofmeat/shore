@@ -331,7 +331,7 @@ async function runGenerationCore(
     const running = wakeNotTold(deps.runningWake?.(charName), engine.thread, engine.messages());
     const status = unshownPresence(presence(deps.dataDir), engine.messages());
     await ensureAndBackfillAutonomy(turnCtx, engine, charName, config);
-    const regenAlt = await appendUserTurn(turnCtx, engine, config.dirs.cache, charName, body, regen, params.rid, imageSettingsFor(config.app.images, "upload"), {
+    const regenAlt = await appendUserTurn(turnCtx, engine, config.dirs.cache, charName, body, regen, Texts.of(config), params.rid, imageSettingsFor(config.app.images, "upload"), {
       ...arrival.annotations,
       ...(running === undefined ? {} : { wake_running: running }),
       ...(status === undefined ? {} : { presence: status }),

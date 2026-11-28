@@ -4,10 +4,7 @@ import { chmodSync } from "node:fs";
 import { dirname, isAbsolute } from "node:path";
 import { constants as zlibConstants, zstdCompressSync, zstdDecompressSync } from "node:zlib";
 
-import {
-  deriveContentFromBlocks,
-  normalizeMessage,
-} from "./message_store.ts";
+import { normalizeMessage } from "./message_store.ts";
 import { alternativeVersionOf, versionOf } from "./versions.ts";
 import { imageBlobs, imageCacheFor, withImageData, withImageReferences, type ImageBlobs } from "../storage/image_blobs.ts";
 import { ImageLocator, imageDirsFor, loadedImage, storedImage, type ImageDirs, type StoredImageRef } from "../storage/image_locations.ts";
@@ -20,6 +17,7 @@ import type {
   MessageNote,
   MessageOrigin,
 } from "./types.ts";
+import { characterTexts } from "../texts/texts.ts";
 
 export const HISTORY_DB_FILE = "shore.db";
 
@@ -689,11 +687,11 @@ export class HistoryStore {
     );
 
     return rows.map((row) => {
-      const { blocks, images, content } = this.#body(row, character, metrics);
+      const { blocks, images } = this.#body(row, character, metrics);
       const message: Message = {
         msg_id: row.msg_id,
         role: row.role,
-        content,
+        content: "",
         images,
         content_blocks: blocks,
         timestamp: row.timestamp,
@@ -846,7 +844,7 @@ export class HistoryStore {
   #alternative(row: BodyRow, character: string, metrics?: HistoryReadMetrics): MessageAlternative {
     const body = this.#body(row, character, metrics);
     return {
-      content: body.content,
+      content: "",
       images: body.images,
       content_blocks: body.blocks,
       timestamp: row.timestamp,
@@ -861,16 +859,16 @@ export class HistoryStore {
     row: BodyRow,
     character: string,
     metrics?: HistoryReadMetrics,
-  ): { blocks: ContentBlock[]; images: ImageRef[]; content: string } {
+  ): { blocks: ContentBlock[]; images: ImageRef[] } {
     const bytes = this.#loadBlob(row.blocks_hash);
     if (bytes === null) throw new MissingBody(row.blocks_hash);
     if (metrics !== undefined) {
       metrics.decoded_body_bytes += bytes.byteLength;
       if (row.images !== null) metrics.decoded_body_bytes += utf8.encode(row.images).byteLength;
     }
-    const blocks = withImageData(JSON.parse(decoder.decode(bytes)) as ContentBlock[], this.#blobs(character));
+    const blocks = withImageData(JSON.parse(decoder.decode(bytes)) as ContentBlock[], this.#blobs(character), () => characterTexts(character));
     const images = row.images === null ? [] : this.#loadedImages(row.images, character);
-    return { blocks, images, content: deriveContentFromBlocks(blocks, true) };
+    return { blocks, images };
   }
 
   #imageDirs(character: string): ImageDirs | undefined {

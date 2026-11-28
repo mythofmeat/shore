@@ -45,7 +45,7 @@ async function world() {
     return { isError: result.isError, text: toolResultText(block.content) };
   };
   const send = async (png: Buffer): Promise<Message> => {
-    const { images } = await ingestImages(cache, "ada", ["cat.png"], [{ filename: "cat.png", data: png.toString("base64") }]);
+    const { images } = await ingestImages(new Texts(), cache, "ada", ["cat.png"], [{ filename: "cat.png", data: png.toString("base64") }]);
     return {
       msg_id: crypto.randomUUID(), role: "user", content: "look", images,
       content_blocks: [{ type: "text", text: "look" }], timestamp: "2026-11-12T09:00:00+11:00",

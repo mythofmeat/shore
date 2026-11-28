@@ -1,6 +1,6 @@
 import { afterEach, expect, test, describe } from "bun:test";
 import { type ChatCompletionChunk, type ChatCompletionCreateParams } from "openai/resources/chat/completions";
-import { openAIStreamEvents, applyPromptCaching, buildOpenAIMessages, OpenAIProvider, turnToOpenAI } from "../src/llm/providers/openai.ts";
+import { openAIStreamEvents, applyPromptCaching, buildOpenAIMessages, buildOpenAIMessagesWithTail, OpenAIProvider, turnToOpenAI } from "../src/llm/providers/openai.ts";
 import { collect, tickingClock, timedChunks } from "./support/stream.ts";
 import { REASONING_OFF, type Sdk, type SidecarRequest, type StreamEvent } from "../src/llm/types.ts";
 
@@ -420,5 +420,29 @@ describe("the prompt-cache helper is nano-gpt's alone", () => {
     const p = params(2);
     applyPromptCaching(request("anthropic", "1h"), p);
     expect(helperIn(p)).toBeUndefined();
+  });
+});
+
+describe("which blocks at the end of each message are left out of the prompt cache", () => {
+  const tailed = (model: string, messages: SidecarRequest["messages"], system?: SidecarRequest["system"]) =>
+    buildOpenAIMessagesWithTail({ sdk: "nanogpt", model, api_key: "k", max_tokens: 8, reasoning_replay: "all", messages, ...(system === undefined ? {} : { system }) });
+
+  test("only the last message a user turn becomes carries its tail, the system prompt, a reply and a tool's message carry none, and a turn with none given has none", () => {
+    const result = tailed("some/model", [
+      { role: "user", content: [{ type: "text", text: "hi" }] },
+      { role: "assistant", content: [{ type: "text", text: "hello" }, { type: "tool_use", id: "t1", name: "look", input: {} }], transient_tail: 1 },
+      { role: "user", content: [{ type: "tool_result", tool_use_id: "t1", content: "seen" }, { type: "text", text: "now?" }, { type: "text", text: "[time]" }], transient_tail: 2 },
+    ], [{ text: "be kind", label: "system" }]);
+    expect(result.messages.map((message) => message.role)).toEqual(["system", "user", "assistant", "tool", "user"]);
+    expect(result.transientTail).toEqual([0, 0, 0, 0, 2]);
+  });
+
+  test("on a model reached through Anthropic's format a system message after a user turn is folded into it and counted in its tail, and elsewhere stays a message of its own", () => {
+    const messages: SidecarRequest["messages"] = [
+      { role: "user", content: [{ type: "text", text: "hi" }], transient_tail: 1 },
+      { role: "system", content: [{ type: "text", text: "a note" }] },
+    ];
+    expect(tailed("anthropic/claude-sonnet-4", messages)).toEqual({ messages: [{ role: "user", content: [{ type: "text", text: "hi" }, { type: "text", text: "a note" }] }], transientTail: [2] });
+    expect(tailed("some/model", messages).transientTail).toEqual([1, 0]);
   });
 });

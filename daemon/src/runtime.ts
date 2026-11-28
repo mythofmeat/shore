@@ -80,6 +80,8 @@ import {
   readNanoGptSubscriptionSync,
 } from "./llm/nanogpt_subscription.ts";
 import { NANOGPT_PROVIDER } from "./llm/providers/nanogpt_config.ts";
+import { noteFirstTexts } from "./texts/seen.ts";
+import { Texts, useCharacterTexts } from "./texts/texts.ts";
 
 const COST_BACKFILL_MS = 6 * 3_600_000;
 
@@ -165,6 +167,8 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
   configureSecretStore(config.dirs.data);
   configureCredentialStanding(config.dirs.cache);
 
+  useCharacterTexts((character) => Texts.of(registry.effectiveConfig(character)));
+  noteFirstTexts(config.dirs.data);
   historyIndex = new HistoryIndexService();
   const refreshHistoryIndexes = async () => {
     const available = new Set(registry.availableCharacters());
@@ -312,6 +316,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       callStore?.close();
       closeLedgers();
       setNanoGptSubscriptionCacheDir(undefined);
+      useCharacterTexts(() => new Texts());
     },
   };
 }

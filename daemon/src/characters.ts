@@ -43,7 +43,7 @@ import {
   unarchiveThread,
   setThreadPurpose,
   threadRecord,
-  ThreadError,
+  threadRefusal,
   writeThreadsIndex,
   type ArchiveThreadOptions,
   type NewThread,
@@ -56,6 +56,7 @@ import {
 } from "./memory/deferred_edits.ts";
 import { characterWorkspace } from "./tools/character_workspace.ts";
 import { required } from "./util/required.ts";
+import { Texts } from "./texts/texts.ts";
 
 export interface RuntimeReloadSummary {
   availableBefore: number;
@@ -222,7 +223,7 @@ export class CharacterRegistry {
     const id = thread ?? this.homeThread(name);
     const index = this.#threads.get(name);
     if (thread !== undefined && index !== undefined && threadRecord(index, thread) === undefined) {
-      throw new ThreadError("not_found", `no thread ${JSON.stringify(thread)} for ${name}`);
+      throw threadRefusal("not_found", "threads_not_found", { thread: JSON.stringify(thread), character: name });
     }
     const key = engineKey(name, id);
     const existing = this.#engines.get(key);
@@ -293,7 +294,7 @@ export class CharacterRegistry {
     options: NewThread = {},
     signal?: AbortSignal,
   ): Promise<ThreadsIndex> {
-    const pins = options.pins === undefined ? undefined : await this.#threadPins(name, options.pins, signal);
+    const pins = options.pins === undefined ? undefined : await this.#threadPins(name, options.pins, options.created_by === "character", signal);
     if (pins !== undefined && options.created_by === "character" && !this.#runsCommands(name)) refuseCommandPins(pins, []);
     return await this.#withThreadIndex(
       name,
@@ -311,17 +312,18 @@ export class CharacterRegistry {
 
   #unsealed(name: string, id: string): string {
     if (sealedIn(characterDataDir(this.#dataDir, name), id) === undefined) return id;
-    throw new ThreadError("exists", `thread ${JSON.stringify(id)} already exists for ${name}`);
+    throw threadRefusal("exists", "threads_exists", { thread: JSON.stringify(id), character: name });
   }
 
   #runsCommands(name: string): boolean {
     return toolEnabled(this.effectiveConfig(name).app.tools, "bash");
   }
 
-  async #threadPins(name: string, pins: readonly string[], signal?: AbortSignal): Promise<string[]> {
+  async #threadPins(name: string, pins: readonly string[], forCharacter: boolean, signal?: AbortSignal): Promise<string[]> {
     const workspace = characterWorkspace(this.#globalConfig, name);
-    return await resolveThreadPins(pins, async (requested) =>
-      await workspace.call("locateFiles", { workspaceDir: workspace.dir, files: requested }, signal), workspace.promptFiles);
+    const texts = forCharacter ? workspace.texts : new Texts();
+    return await resolveThreadPins(texts, pins, async (requested) =>
+      await workspace.call("locateFiles", { workspaceDir: workspace.dir, files: requested, texts: texts.overrides() }, signal), workspace.promptFiles);
   }
 
   async archiveThread(
@@ -423,7 +425,7 @@ export class CharacterRegistry {
     pins: readonly string[],
     signal?: AbortSignal,
   ): Promise<ThreadsIndex> {
-    const resolved = await this.#threadPins(name, pins, signal);
+    const resolved = await this.#threadPins(name, pins, false, signal);
     return await this.#withThreadIndex(
       name,
       async () =>
@@ -531,7 +533,7 @@ export class CharacterRegistry {
   ): Promise<ThreadsIndex> {
     const known = this.#threads.get(name);
     if (known !== undefined) requireEditableByCharacter(known, name, id);
-    const pins = edit.pins === undefined ? undefined : await this.#threadPins(name, edit.pins, signal);
+    const pins = edit.pins === undefined ? undefined : await this.#threadPins(name, edit.pins, true, signal);
     return await this.#withThreadIndex(
       name,
       async () =>

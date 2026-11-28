@@ -13,6 +13,7 @@ import { initializeDatabase } from "../src/storage/database.ts";
 import { handleReadChatLogs, handleSearchChatLogs } from "../src/tools/history.ts";
 import { testTmp } from "./support/tmp.ts";
 import { outcomeOf } from "./support/outcome.ts";
+import { Texts, useCharacterTexts } from "../src/texts/texts.ts";
 
 function message(id: string, content: string): Message {
   return {
@@ -58,6 +59,17 @@ test("canonical history round-trips message bodies and alternatives", () => {
 
   expect(store.readSegment("ada", 0)).toEqual([message("u1", "hello"), assistant]);
   expect(store.hasCompactionOperation("ada", "compact-1")).toBe(true);
+  store.close();
+});
+
+test("a stored message's text is read back from its blocks, a tool's result included", () => {
+  const store = HistoryStore.openInMemory();
+  const result: Message = {
+    msg_id: "r1", role: "user", content: "", images: [], timestamp: "2026-08-13T10:00:00+10:00",
+    content_blocks: [{ type: "tool_result", tool_use_id: "t1", content: "the tide is out", is_error: false }],
+  };
+  store.putSegment("ada", 0, { file: "0001.jsonl", compacted_at: "2026-08-13T10:01:00+10:00", compaction_id: "compact-1" }, [result]);
+  expect(store.readSegment("ada", 0).map((each) => each.content)).toEqual(["the tide is out"]);
   store.close();
 });
 
@@ -191,7 +203,7 @@ test("a compaction remains readable after its JSONL recovery copy is removed", a
   expect(await reader.readSegment(0)).toEqual(messages);
   reader.close();
 
-  const options = { character: "ada", dbPath, timeZone: "Australia/Canberra" };
+  const options = { texts: new Texts(), character: "ada", dbPath, timeZone: "Australia/Canberra" };
   expect(await handleSearchChatLogs({ query: "hello", all_time: true }, characterDir, options)).toBe([
     "hello: 1 match, showing 1–1, best match first",
     "",
@@ -238,7 +250,7 @@ test("chat logs show where each picture the user sent is kept, or just its name 
     "compact-2",
   );
 
-  const options = { character: "ada", dbPath, timeZone: "Australia/Canberra" };
+  const options = { texts: new Texts(), character: "ada", dbPath, timeZone: "Australia/Canberra" };
   expect(await handleSearchChatLogs({ query: "IMG_0955", all_time: true }, characterDir, options)).toBe([
     "IMG_0955: 1 match, showing 1–1, best match first",
     "",
@@ -263,6 +275,49 @@ test("chat logs show where each picture the user sent is kept, or just its name 
   expect(await handleReadChatLogs({ around: "u1" }, characterDir, options)).toBe(read(`[picture: ${kept}]`));
   await rm(kept);
   expect(await handleReadChatLogs({ around: "u1" }, characterDir, options)).toBe(read("[picture: IMG_0955.jpeg]"));
+});
+
+test("chat logs show and search pictures in the user's wording of picture, embed_sent and embed_not_sent, see a change of wording at once, and leave out what is switched off", async () => {
+  const dirs = historyDirs();
+  const kept = join(dirs.dataDir, "attachments", "lamp.jpeg");
+  await mkdir(join(dirs.dataDir, "attachments"), { recursive: true });
+  await writeFile(kept, "jpeg");
+  await archiveMain(dirs, [
+    { ...message("u1", "the lamp"), images: [{ path: kept, name: "lamp.jpeg" }, { path: join(dirs.dataDir, "gone.png"), name: "gone.png" }] },
+    {
+      ...message("a1", "mine ![[cat.png]] and ![[walk.mp4]] but not ![[lost.png]] or ![[lost.webm]]"),
+      images: [
+        { path: "/cache/cat.png", embed: "![[cat.png]]", name: "cat.png" },
+        { path: "/cache/walk.mp4", embed: "![[walk.mp4]]", name: "walk.mp4" },
+        { path: "", embed: "![[lost.png]]", problem: "no picture matches" },
+        { path: "", embed: "![[lost.webm]]", problem: "no video matches" },
+      ],
+    },
+  ]);
+  const config = join(dirs.dataDir, "config");
+  await mkdir(config);
+  await writeFile(join(config, "picture.md"), "(photo {{path}})\n");
+  await writeFile(join(config, "sent.md"), "(sent {{#if video}}clip{{else}}photo{{/if}} {{name}})\n");
+  await writeFile(join(config, "unsent.md"), "(missing {{#if video}}clip{{else}}photo{{/if}} {{name}})\n");
+  const options = (texts: Texts) => ({ texts, character: "ada", dbPath: dirs.dbPath, timeZone: "Australia/Canberra" });
+  const using = (texts: Texts): Texts => {
+    useCharacterTexts((character) => character === "ada" ? texts : new Texts());
+    return texts;
+  };
+  try {
+    const theirs = using(new Texts({ picture: "picture.md", embed_sent: "sent.md", embed_not_sent: "unsent.md" }, config));
+    const read = async (texts: Texts) => (await handleReadChatLogs({ around: "u1" }, dirs.characterDir, options(texts))).split("\n").slice(3).filter((line) => line !== "" && !line.includes("  ada  "));
+    expect(await read(theirs)).toEqual([`(photo ${kept})`, "(photo gone.png)", "the lamp", "mine (sent photo cat.png) and (sent clip walk.mp4) but not (missing photo lost.png) or (missing clip lost.webm)"]);
+    expect(await handleSearchChatLogs({ query: "photo", all_time: true }, dirs.characterDir, options(theirs))).toContain("u1");
+
+    await writeFile(join(config, "picture.md"), "(snap {{path}})\n");
+    const changed = using(new Texts({ picture: "picture.md", embed_sent: false, embed_not_sent: false }, config));
+    expect(await read(changed)).toEqual([`(snap ${kept})`, "(snap gone.png)", "the lamp", "mine  and  but not  or"]);
+    expect(await handleSearchChatLogs({ query: "snap", all_time: true }, dirs.characterDir, options(changed))).toContain("u1");
+    expect(await read(using(new Texts({ picture: false }, config)))).toEqual(["the lamp", "mine [picture: cat.png] and [video: walk.mp4] but not [picture not sent: lost.png] or [video not sent: lost.webm]"]);
+  } finally {
+    useCharacterTexts(() => new Texts());
+  }
 });
 
 function historyDirs(): { dataDir: string; characterDir: string; dbPath: string } {
@@ -303,7 +358,7 @@ test("a page of chat logs holds what fits in 12,000 characters as they are shown
   }));
   await archiveMain(dirs, messages);
 
-  const page = (await handleReadChatLogs({ start: "2026-08-13", end: "2026-08-13" }, characterDir, { character: "ada", dbPath, timeZone: "Australia/Canberra" })).split("\n");
+  const page = (await handleReadChatLogs({ start: "2026-08-13", end: "2026-08-13" }, characterDir, { texts: new Texts(), character: "ada", dbPath, timeZone: "Australia/Canberra" })).split("\n");
 
   expect(page[0]).toBe("main, 2026-08-13 → 2026-08-13: messages 1–44 of 45 (Australia/Canberra)");
   expect(page.filter((line) => line === label)).toHaveLength(44);
@@ -314,7 +369,7 @@ test("the chat log index is put in place readable by the daemon alone, and close
   const dirs = historyDirs();
   const { dataDir, characterDir, dbPath } = dirs;
   await archiveMain(dirs, [message("u1", "hello"), message("a1", "hi")]);
-  const options = { character: "ada", dbPath, timeZone: "Australia/Canberra", indexPath: join(dataDir, "chat_logs.db") };
+  const options = { texts: new Texts(), character: "ada", dbPath, timeZone: "Australia/Canberra", indexPath: join(dataDir, "chat_logs.db") };
   const renameSync = fs.renameSync;
   const modesPutInPlace: number[] = [];
   const placing = spyOn(fs, "renameSync").mockImplementation((from, to) => {

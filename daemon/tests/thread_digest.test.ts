@@ -169,3 +169,19 @@ test("a speaker switched off leaves their messages out of what a wake is shown, 
   expect(await threadDigest(silent, thread([user(1, "hello")]), undefined, "eve", "UTC")).toBeUndefined();
   expect(await threadDigest(new Texts({ digest_nothing_yet: false }, ""), thread([]), undefined, "eve", "UTC")).toBeUndefined();
 });
+
+test("a message held both in the conversation and in its last archive is shown once, and a wake since a message's own minute reads no further back", async () => {
+  const kept = user(1, "the one in both");
+  const shown = required(await threadDigest(new Texts(), thread([kept, reply(2, "hi")], [[user(0, "before"), kept]]), undefined, "eve", "UTC"));
+  expect(shown.split("the one in both").length).toBe(2);
+  const reads: number[] = [];
+  required(await threadDigest(new Texts(), thread([user(5, "at the wake"), reply(6, "after it")], [[user(1, "long ago")]], reads), T0 + 5 * MINUTE, "eve", "UTC"));
+  expect(reads).toEqual([]);
+});
+
+test("a message of Shore's own in the thread is never shown as said, whoever it came from", async () => {
+  const ring = thread([user(1, "hello"), message("system", 2, "[a note Shore left]"), reply(3, "hi")]);
+  const shown = required(await threadDigest(new Texts(), ring, undefined, "eve", "UTC"));
+  expect(shown).toContain("hello");
+  expect(shown).not.toContain("a note Shore left");
+});

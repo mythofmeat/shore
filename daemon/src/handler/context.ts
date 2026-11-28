@@ -265,6 +265,7 @@ export async function buildChatShapeRequestFromDisk(
       toRequestModel(resolved),
       entry === undefined ? undefined : toCredentialsEntry(entry),
       {
+        texts: Texts.of(config),
         messages: prepared.llmMessages,
         system: prepared.system,
         ...(prepared.toolDefs === undefined ? {} : { tools: prepared.toolDefs }),

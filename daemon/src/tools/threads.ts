@@ -25,17 +25,14 @@ export interface ThreadsTool {
 }
 
 export async function handleThreads(input: Record<string, unknown>, tool: ThreadsTool): Promise<string> {
-  const action = actionOf(input, TAKES);
+  const texts = tool.list.texts;
+  const action = actionOf(texts, input, TAKES);
   if (action === "list") return await handleListThreads(tool.list);
-  if (tool.dryRun === true) throw new ToolIoError(`threads ${action} blocked: dry-run tools cannot change files or external state`);
+  if (tool.dryRun === true) throw new ToolIoError(texts.always("tool_dry_run", { tool: `threads ${action}` }));
   const user = tool.list.userName;
-  if (action === "edit") return await handleEditThread(input, tool.edit, user);
-  if (!("sealed_until" in input)) return await handleStartThread(input, tool.start, user);
+  if (action === "edit") return await handleEditThread(texts, input, tool.edit, user);
+  if (!("sealed_until" in input)) return await handleStartThread(texts, input, tool.start, user);
   const given = NOT_SEALED_IN.filter((field) => field in input);
-  if (given.length > 0) {
-    throw new InvalidArgs(
-      `a sealed thread takes only name, label and sealed_until, not ${given.join(" or ")}: this call stays where ${user} can read it, so say what the thread is for inside it, in your first wake there`,
-    );
-  }
-  return await handleStartSealedThread(input, tool.seal, user, tool.timeZone);
+  if (given.length > 0) throw new InvalidArgs(texts.always("threads_sealed_takes", { fields: given.join(" or "), user }));
+  return await handleStartSealedThread(texts, input, tool.seal, user, tool.timeZone);
 }

@@ -1,12 +1,14 @@
 import { writeDurable } from "../src/storage/files.ts";
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { mkdirSync, mkdtempSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { CharacterConfigError, CharacterRegistry } from "../src/characters.ts";
+import { CharacterConfigError, CharacterRegistry, EngineCharacterNotFound } from "../src/characters.ts";
+import { ConversationEngine } from "../src/engine/conversation.ts";
+import { rejectionOf } from "./support/outcome.ts";
 import { discoverCharacters } from "../src/config/dirs.ts";
-import { characterWorkspace } from "../src/tools/character_workspace.ts";
+import { CharacterWorkspace, characterWorkspace, workspaceTexts } from "../src/tools/character_workspace.ts";
 import { initializeDatabase } from "../src/storage/database.ts";
 import { readCharacterState, writeCharacterState } from "../src/storage/store.ts";
 import { loadConfig, type LoadedConfig } from "../src/config/loader.ts";
@@ -48,6 +50,38 @@ test("concurrent first loads of one character resolve to the same engine", async
 
   expect(engines[1]).toBe(engines[0]);
   expect(engines[2]).toBe(engines[0]);
+});
+
+test("opening a character that isn't there, or a thread it doesn't have, is refused, and an opening that fails is tried again next time", async () => {
+  const root = makeRoot();
+  const configDir = join(root, "config");
+  const dataDir = join(root, "data");
+  mkdirSync(configDir, { recursive: true });
+  writeFileSync(join(configDir, "config.toml"), "\n");
+  writeCharacter(configDir, "Alice", true);
+  mkdirSync(join(dataDir, "Alice", "threads", "main"), { recursive: true });
+  const registry = await CharacterRegistry.create(configDir, dataDir, loadFrom(join(configDir, "config.toml")));
+  expect(await rejectionOf(registry.getOrCreate("Bob"))).toBeInstanceOf(EngineCharacterNotFound);
+  expect(String(await rejectionOf(registry.getOrCreate("Alice", "nowhere")))).toBe('ThreadError: no thread "nowhere" for Alice');
+  const broken = new Error("the disk hiccuped");
+  const load = spyOn(ConversationEngine, "load").mockRejectedValueOnce(broken);
+  try {
+    expect(await rejectionOf(registry.getOrCreate("Alice"))).toBe(broken);
+    expect(await registry.getOrCreate("Alice")).toBeInstanceOf(ConversationEngine);
+  } finally {
+    load.mockRestore();
+  }
+});
+
+test("a workspace elsewhere keeps the character's tools and texts, and the same folder is the same workspace", () => {
+  const root = makeRoot();
+  writeFileSync(join(root, "mine.md"), "MINE\n");
+  const workspace = new CharacterWorkspace(join(root, "workspace"), { user: undefined, passEnv: ["LANG"], noNewPrivs: true, checkLimitMs: 1000 }, [], { app: { texts: { output_cut: "mine.md" } }, dirs: { config: root } });
+  expect(workspace.at(workspace.dir)).toBe(workspace);
+  const elsewhere = workspace.at(join(root, "elsewhere"));
+  expect([elsewhere.dir, elsewhere.tools, elsewhere.texts.render("output_cut")]).toEqual([join(root, "elsewhere"), workspace.tools, "MINE"]);
+  expect(workspaceTexts(workspace).render("output_cut")).toBe("MINE");
+  expect(workspaceTexts(join(root, "workspace")).render("output_cut")).toBe("[process output truncated]");
 });
 
 test("opening a character seals tool calls interrupted by a daemon restart", async () => {

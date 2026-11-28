@@ -1,0 +1,1 @@
+[{{count}} image(s)]

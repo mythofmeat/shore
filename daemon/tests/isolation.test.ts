@@ -38,6 +38,7 @@ import { redoTurns, restorePaths, undoTurns, WorkspaceRecorder, workspaceChanges
 import { setTestEnv } from "./support/env.ts";
 import { testTmp } from "./support/tmp.ts";
 import { Texts } from "../src/texts/texts.ts";
+import { errorText } from "../src/tools/errors.ts";
 
 const ROOT = process.env["SHORE_ISOLATION_ROOT"] ?? "";
 const USER = process.env["SHORE_ISOLATION_USER"] ?? "";
@@ -86,7 +87,7 @@ async function failure(work: Promise<unknown>): Promise<string> {
   try {
     await work;
   } catch (error) {
-    return error instanceof Error ? error.message : String(error);
+    return errorText(new Texts(), error);
   }
   throw new Error("expected the call to fail");
 }
@@ -184,7 +185,7 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
     });
     const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
     const sent = async (character: string): Promise<Message> => {
-      const { images } = await ingestImages(cache, character, ["dot.png"], [{ filename: "dot.png", data: png.toString("base64") }]);
+      const { images } = await ingestImages(new Texts(), cache, character, ["dot.png"], [{ filename: "dot.png", data: png.toString("base64") }]);
       return { msg_id: randomUUID(), role: "user", content: "look", images, content_blocks: [{ type: "text", text: "look" }], timestamp: "2026-11-12T10:00:00Z" };
     };
     const [own, others, unshared] = [await sent(USER), await sent(OTHER), await sent("cal")];

@@ -110,7 +110,7 @@ test("no page leaves a value unfilled, whatever the settings and whichever tools
 test("every example trigger in the guide is one the trigger parser accepts", async () => {
   const pages = await everyPage(await guideWith());
   const examples = pages.flatMap((page) => fenced(page, "toml"));
-  const parsed = examples.map((example) => parseTriggers(example, HOUR));
+  const parsed = examples.map((example) => parseTriggers(new Texts(), example, HOUR));
   expect(parsed.flatMap((each) => each.problems)).toEqual([]);
   expect(parsed.map((each) => each.triggers.map((trigger) => trigger.name))).toEqual([["mail", "lighthouse", "free-time", "parcel"], ["gone-to-bed"]]);
 });
@@ -131,6 +131,7 @@ test("the guide's example file does what the guide says of it: a check that wake
     lastUserAt: () => world.lastUserAt,
     statuses: () => [],
     readFile: async () => fenced(page, "toml")[0],
+    texts: () => new Texts(),
     runCheck: async () => world.mail,
     wake: (firing) => { woke.push(firing); },
   });
@@ -196,7 +197,7 @@ test("every setting the guide writes out in passing is one the trigger parser ac
   expect(settings).toContain("wake = false");
   expect(settings.length).toBeGreaterThan(15);
   const refused = settings.flatMap((line) => {
-    const read = parseTriggers(aroundSetting(line), HOUR);
+    const read = parseTriggers(new Texts(), aroundSetting(line), HOUR);
     return read.problems.length === 0 && read.triggers.some((trigger) => trigger.name === "t") ? [] : [`${line}: ${read.problems.join("; ")}`];
   });
   expect(refused).toEqual([]);
@@ -209,7 +210,7 @@ test("the guide is enough to write a check that reacts to one status going on: i
   expect(page).toContain("`SHORE_USER_STATUSES` is empty while eve has no status on, and the last two are empty for every other kind of trigger.");
   expect(page).toContain("Since any exit but 0 is a failure, write a test as an `if`.");
 
-  const example = fenced(page, "toml").map((block) => parseTriggers(block, HOUR).triggers).flat().find((trigger) => trigger.name === "gone-to-bed");
+  const example = fenced(page, "toml").map((block) => parseTriggers(new Texts(), block, HOUR).triggers).flat().find((trigger) => trigger.name === "gone-to-bed");
   expect(example?.when).toEqual({ kind: "event", event: "status_changed", afterMs: 0 });
   const dir = await mkdtemp(testTmp("shore-guide-check-"));
   const at = new Date(T0 - HOUR).toISOString();

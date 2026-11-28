@@ -86,21 +86,21 @@ fn texts() -> serde_json::Value {
                 required: bool,
                 wording: Option<&str>,
                 shipped: &str| {
-        json!({ "name": name, "place": place, "owner": owner, "required": required, "wording": wording, "shipped": shipped, "file": null, "error": null, "values": [] })
+        json!({ "name": name, "place": place, "owner": owner, "required": required, "wording": wording, "shipped": shipped, "file": null, "error": null, "values": [], "changed": false, "previous": null })
     };
     json!({ "texts": [
         {
             "name": "time", "place": "Before a user's message.", "owner": "yours", "required": false,
             "wording": "[now: {{now}}]\nand then", "shipped": "[{{now}}]", "file": "/srv/config/texts/time.md", "error": null,
-            "values": [{ "name": "now", "about": "the time" }],
+            "values": [{ "name": "now", "about": "the time" }], "changed": false, "previous": null,
         },
         text("status", "The user's statuses.", "off", false, None, "[Their status: {{statuses}}]"),
         text("opened_by_you", "A user turn put first.", "shore", true, Some("[this conversation starts with your message]"), "[this conversation starts with your message]"),
         {
             "name": "label", "place": "The request for a label.", "owner": "yours", "required": true, "wording": null, "shipped": "Label this.",
             "file": "/srv/config/gone.md", "error": "text \"label\" could not be read at /srv/config/gone.md: no such file", "values": [],
+            "changed": false, "previous": null,
         },
-        text("line_cut", "After a line read cuts short.", "fixed", true, Some("[line cut]"), "[line cut]"),
         text("cli_identity", "The CLI's first line.", "cli", false, Some("You are a Claude agent."), "You are a Claude agent."),
     ]})
 }
@@ -111,7 +111,7 @@ fn config_texts_lists_every_text_with_whose_wording_is_in_use_and_where_it_goes(
     assert!(output.status.success(), "{output:?}");
     assert_eq!(
         printed(&output),
-        "time           yours           Before a user's message.\n  status         off             The user's statuses.\n  opened_by_you  Shore's         A user turn put first.\n  label          yours           The request for a label.\n  line_cut       Shore's, fixed  After a line read cuts short.\n  cli_identity   the CLI's       The CLI's first line."
+        "time           yours      Before a user's message.\n  status         off        The user's statuses.\n  opened_by_you  Shore's    A user turn put first.\n  label          yours      The request for a label.\n  cli_identity   the CLI's  The CLI's first line."
     );
     assert_eq!(sent(&frames), [(Some("texts"), Some(&json!({})))]);
 }
@@ -155,4 +155,42 @@ fn config_texts_refuses_a_name_it_has_no_text_for_and_gives_the_list_as_json() {
         serde_json::from_str::<serde_json::Value>(&printed(&raw)).ok(),
         Some(texts())
     );
+}
+
+fn changed_texts() -> serde_json::Value {
+    json!({ "texts": [
+        {
+            "name": "time", "place": "Before a user's message.", "owner": "shore", "required": false, "wording": "[{{now}}]",
+            "shipped": "[{{now}}]", "file": null, "error": null, "values": [], "changed": false, "previous": null,
+        },
+        {
+            "name": "wake", "place": "The end of a wake's opening.", "owner": "shore", "required": false, "wording": "Wake, please.",
+            "shipped": "Wake, please.", "file": null, "error": null, "values": [], "changed": true, "previous": "Wake up.",
+        },
+        {
+            "name": "wake_turn", "place": "Before a message sent from a wake.", "owner": "shore", "required": true, "wording": "[wake]",
+            "shipped": "[wake]", "file": null, "error": null, "values": [], "changed": true, "previous": null,
+        },
+    ]})
+}
+
+#[test]
+fn config_texts_marks_a_text_an_update_reworded_or_added_shows_the_wording_before_and_marks_them_seen_with_seen()
+ {
+    let (output, frames) = asked(changed_texts(), &["config", "texts"]);
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(
+        printed(&output),
+        "── changed in an update ────────────────────────────────────────────────────────\n  wake       Shore's, changed  The end of a wake's opening.\n  wake_turn  Shore's, new      Before a message sent from a wake.\n  `shore config texts --seen` marks them seen.\n\n── texts ───────────────────────────────────────────────────────────────────────\n  time  Shore's  Before a user's message."
+    );
+    assert_eq!(sent(&frames), [(Some("texts"), Some(&json!({})))]);
+    let (detail, _detail_asked) = asked(changed_texts(), &["config", "texts", "wake"]);
+    assert_eq!(
+        printed(&detail),
+        "── wake · Shore's, changed ─────────────────────────────────────────────────────\n  where  The end of a wake's opening.\n\n  wording in use:\n    Wake, please.\n\n  Shore's wording before an update changed it:\n    Wake up."
+    );
+    let (seen, seen_frames) = asked(texts(), &["config", "texts", "--seen"]);
+    assert!(seen.status.success(), "{seen:?}");
+    assert_eq!(sent(&seen_frames), [(Some("texts_seen"), Some(&json!({})))]);
+    assert!(printed(&seen).starts_with("time           yours"));
 }

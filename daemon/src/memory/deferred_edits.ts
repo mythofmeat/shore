@@ -36,7 +36,7 @@ async function workspaceFile(workspace: CharacterWorkspace, name: string): Promi
 
 async function threadFileContent(workspace: CharacterWorkspace, name: string): Promise<string | undefined> {
   const bytes = await workspaceBytes(workspace, name).catch(() => undefined);
-  return bytes === undefined ? undefined : threadFilePromptText(name, bytes);
+  return bytes === undefined ? undefined : threadFilePromptText(workspace.texts, name, bytes);
 }
 
 async function pinContent(characterDataDir: string, workspace: CharacterWorkspace, pin: string): Promise<string | undefined> {

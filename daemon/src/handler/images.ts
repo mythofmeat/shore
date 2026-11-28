@@ -5,7 +5,8 @@ import { readFile } from "node:fs/promises";
 
 import type { ContentBlock, ImageRef } from "../engine/types.ts";
 import { base64Rejection } from "../util/base64.ts";
-import { findModelCopy, modelCopyPath, omissionNotice, resolveImage } from "../llm/images.ts";
+import { findModelCopy, modelCopyPath, omissionNotice, resolveImage, type Omission } from "../llm/images.ts";
+import type { Texts } from "../texts/texts.ts";
 import { prepareImageBlock, reduceImage } from "../llm/prepare_images.ts";
 import { DEFAULT_IMAGE_SETTINGS, type ImageSettings } from "../llm/image_settings.ts";
 import { atomicWrite } from "../engine/atomic.ts";
@@ -124,6 +125,7 @@ async function saveAttachment(
 }
 
 export async function ingestImages(
+  texts: Texts,
   cacheDir: string,
   charName: string,
   imagePaths: readonly string[],
@@ -134,21 +136,25 @@ export async function ingestImages(
   const images: ImageRef[] = [];
   const blocks: ContentBlock[] = [];
 
+  const omit = (label: string, omission: Omission): void => {
+    const text = omissionNotice(texts, label, omission);
+    if (text !== undefined) blocks.push({ type: "text", text });
+  };
   const keep = async (label: string, saved: { ref: ImageRef; added: boolean; bytes: Uint8Array } | undefined): Promise<void> => {
     if (saved === undefined) {
-      blocks.push({ type: "text", text: omissionNotice(label, "it could not be attached") });
+      omit(label, { reason: "image_not_saved" });
       return;
     }
     const added = saved.added ? saved.bytes.byteLength : 0;
     const resolution = resolveImage(saved.ref);
     if ("omitted" in resolution) {
-      blocks.push({ type: "text", text: omissionNotice(label, resolution.omitted) });
-      if (added > 0) noteCachedImages(cacheDir, added);
+      omit(label, resolution.omitted);
+      if (added !== 0) noteCachedImages(cacheDir, added);
       return;
     }
     const copied = findModelCopy(saved.ref.path) === undefined ? await saveModelCopy(saved.ref.path, saved.bytes, settings) : 0;
     images.push(saved.ref);
-    if (added + copied > 0) noteCachedImages(cacheDir, added + copied);
+    if (added + copied !== 0) noteCachedImages(cacheDir, added + copied);
   };
 
   for (const upload of imageData) {
@@ -161,10 +167,7 @@ export async function ingestImages(
     if (imageData[uploadIndex]?.filename === label) {
       uploadIndex += 1;
     } else {
-      blocks.push({
-        type: "text",
-        text: omissionNotice(label, "the client could not upload it"),
-      });
+      omit(label, { reason: "image_not_uploaded" });
     }
   }
 

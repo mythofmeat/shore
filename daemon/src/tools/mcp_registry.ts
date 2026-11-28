@@ -7,6 +7,7 @@ import type { ToolDefinition } from "../llm/types.ts";
 import { McpTransportError } from "../mcp/client.ts";
 import type { McpClient, McpServerSpec, Transport } from "../mcp/client.ts";
 import { compileToolSchema } from "./validate.ts";
+import type { Texts } from "../texts/texts.ts";
 
 export interface McpToolDef {
   full_name: string;
@@ -465,17 +466,17 @@ export class McpRegistry {
     return this.surface.tools.filter((t) => patterns.some((p) => toolPatternMatches(p, t.full_name)));
   }
 
-  async call(fullName: string, args: unknown, signal?: AbortSignal): Promise<unknown> {
+  async call(fullName: string, args: unknown, texts: Texts, signal?: AbortSignal): Promise<unknown> {
     const surface = this.surface;
     const def = surface.tools.find((t) => t.full_name === fullName);
-    if (def === undefined) throw new InvalidArgs(`${fullName}: not yet implemented`);
+    if (def === undefined) throw new InvalidArgs(texts.always("tool_not_implemented", { tool: fullName }));
     const client = surface.clients.get(def.server);
     if (client === undefined) {
       await this.reviveClient(def.server);
-      throw new McpTransportError(`MCP server '${def.server}' is unavailable`);
+      throw new McpTransportError(texts.always("mcp_unavailable", { server: def.server }));
     }
     try {
-      return await client.call(def.tool, args, signal, def.repeatable);
+      return await client.call(def.tool, args, texts, signal, def.repeatable);
     } catch (e) {
       if (!(e instanceof McpTransportError)) throw e;
       this.markUnavailable(def.server, String(e));

@@ -20,7 +20,8 @@ import {
 } from "ai";
 
 import type { ContentBlock } from "../../engine/types.ts";
-import { resolveImageBlock, omissionNotice } from "../images.ts";
+import { resolveImageBlock, requestTexts, unnamedOmission, type ImagePlace } from "../images.ts";
+import { Texts } from "../../texts/texts.ts";
 import type {
   GenerateResponse,
   SidecarProvider,
@@ -279,7 +280,7 @@ function buildMessages(req: SidecarRequest): ModelMessage[] {
     : coalesceToolResults(replayableMessages(req));
   for (const turn of turns) {
     const norm = toTurn(turn);
-    messages.push(...turnToVercel(norm, toolNames, req.sdk));
+    messages.push(...turnToVercel(norm, toolNames, req.sdk, requestTexts(req)));
     for (const b of norm.content) {
       if (b.type === "tool_use") toolNames.set(b.id, b.name);
     }
@@ -298,6 +299,7 @@ export function turnToVercel(
   turn: TurnMessage,
   toolNames: Map<string, string>,
   sdk?: SidecarRequest["sdk"],
+  texts: Texts = new Texts(),
 ): ModelMessage[] {
   if (turn.role === "system") {
     return [{ role: "system", content: textOf(turn) }];
@@ -356,42 +358,23 @@ export function turnToVercel(
   for (const b of turn.content) {
     if (b.type === "tool_result") {
       const images = toolResultImages(b.content);
-      if (images.length > 0) userParts.push({ type: "text", text: `Images from tool ${toolNames.get(b.tool_use_id) ?? "result"} (tool_call_id: ${b.tool_use_id}):` });
-      for (const image of images) {
-        const resolution = resolveImageBlock(image.source);
-        if ("omitted" in resolution) {
-          userParts.push({
-            type: "text",
-            text: omissionNotice("a tool result image", resolution.omitted),
-          });
-        } else {
-          userParts.push({
-            type: "image",
-            image: resolution.image.base64,
-            mediaType: resolution.image.mediaType,
-          });
-        }
-      }
+      const label = images.length > 0 ? texts.render("image_from_tool", { tool: toolNames.get(b.tool_use_id), id: b.tool_use_id }) : undefined;
+      if (label !== undefined) userParts.push({ type: "text", text: label });
+      for (const image of images) userParts.push(...vercelImage(texts, image.source, "image_in_tool_result"));
     } else if (b.type === "text") {
       userParts.push({ type: "text", text: b.text });
     } else if (b.type === "image") {
-      const resolution = resolveImageBlock(b.source);
-      if ("omitted" in resolution) {
-        userParts.push({
-          type: "text",
-          text: omissionNotice("an attached image", resolution.omitted),
-        });
-      } else {
-        userParts.push({
-          type: "image",
-          image: resolution.image.base64,
-          mediaType: resolution.image.mediaType,
-        });
-      }
+      userParts.push(...vercelImage(texts, b.source, "image_in_message"));
     }
   }
   if (userParts.length > 0) out.push({ role: "user", content: userParts });
   return out;
+}
+
+function vercelImage(texts: Texts, source: Parameters<typeof resolveImageBlock>[0], place: ImagePlace): Array<{ type: "text"; text: string } | { type: "image"; image: string; mediaType: string }> {
+  const resolution = resolveImageBlock(source);
+  if ("omitted" in resolution) return unnamedOmission(texts, place, resolution.omitted) as { type: "text"; text: string }[];
+  return [{ type: "image", image: resolution.image.base64, mediaType: resolution.image.mediaType }];
 }
 
 function emptyUsage(): Usage {

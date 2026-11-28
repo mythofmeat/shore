@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rename, rm, utimes, writeFile } from "node:fs/promises";
@@ -24,6 +24,8 @@ import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/l
 import type { McpClient, McpServerSpec } from "../src/mcp/client.ts";
 import type { McpRegistry } from "../src/tools/mcp_registry.ts";
 import { createRuntime, type RuntimeOptions, type ShoreRuntime } from "../src/runtime.ts";
+import { characterTexts } from "../src/texts/texts.ts";
+import * as characterWorkspaceModule from "../src/tools/character_workspace.ts";
 import { imageBlobDir } from "../src/storage/image_blobs.ts";
 import { attachmentCacheDir } from "../src/storage/image_cache.ts";
 import { providerCacheDir } from "../src/storage/provider_cache.ts";
@@ -285,6 +287,29 @@ describe("a runtime coming up", () => {
     await runtime.registry.reloadRuntimeState(config);
     await runtime.refreshHistoryIndexes();
     expect(runtime.historyIndex.registeredCharacters()).toEqual(["ada"]);
+  });
+
+  test("gives what it reads from history each character's own texts while it runs, and Shore's once it stops", async () => {
+    const config = await install("", ["ada", "bea"]);
+    await mkdir(join(config.dirs.config, "characters", "ada"), { recursive: true });
+    await writeFile(join(config.dirs.config, "characters", "ada", "config.toml"), '[texts]\npicture_gone = "gone.md"\n');
+    await writeFile(join(config.dirs.config, "gone.md"), "(ada's picture {{name}} is gone)\n");
+    const runtime = await start(config);
+    expect(characterTexts("ada").render("picture_gone", { name: "x.png" })).toBe("(ada's picture x.png is gone)");
+    expect(characterTexts("bea").render("picture_gone", { name: "x.png" })).toBe("[image omitted: x.png — no longer cached]");
+    await stopped(runtime);
+    expect(characterTexts("ada").render("picture_gone", { name: "x.png" })).toBe("[image omitted: x.png — no longer cached]");
+  });
+
+  test("closes the helpers its characters' tools ran through when it stops", async () => {
+    const runtime = await start(await install("", ["ada"]));
+    const close = spyOn(characterWorkspaceModule, "closeWorkspaceHelpers");
+    try {
+      await stopped(runtime);
+      expect(close).toHaveBeenCalledTimes(1);
+    } finally {
+      close.mockRestore();
+    }
   });
 });
 

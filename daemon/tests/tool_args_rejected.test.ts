@@ -6,6 +6,7 @@ import { schemasFrom, schemaViolation } from "../src/tools/validate.ts";
 import { BUILTIN_TOOL_SCHEMAS } from "./support/builtin_tool_schemas.ts";
 import type { ToolContext } from "../src/tools/dispatch.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 const READ_SCHEMA = {
   type: "object",
@@ -18,8 +19,8 @@ describe("parseToolArgs", () => {
   test("a truncated payload reports the failure instead of becoming {}", () => {
     const parsed = parseToolArgs('{"path":"notes.md"');
     expect(parsed.input).toEqual({});
-    expect(parsed.input_error).toContain("not valid JSON");
-    expect(parsed.input_error).toContain("18 characters");
+    expect(parsed.input_error).toBeString();
+    expect(parsed.input_length).toBe(18);
   });
 
   test("no arguments at all are an empty input, and a parse failure gives the parser's own words", () => {
@@ -30,7 +31,7 @@ describe("parseToolArgs", () => {
     } catch (e) {
       why = (e as Error).message;
     }
-    expect(parseToolArgs("{")).toStrictEqual({ input: {}, input_error: `the arguments were not valid JSON (${why}); 1 characters arrived` });
+    expect(parseToolArgs("{")).toStrictEqual({ input: {}, input_error: why, input_length: 1 });
   });
 });
 
@@ -39,7 +40,7 @@ describe("runToolUse", () => {
     const frames: ServerMessage[] = [];
     const exec: ToolExecution = {
       sendDirect: (m) => frames.push(m),
-      ctx: { characterName: "Rhia" } as unknown as ToolContext,
+      ctx: { characterName: "Rhia", texts: new Texts() } as unknown as ToolContext,
       limits: { timeouts: {}, result_chars: {} } as never,
       now: () => "2026-08-13T00:00:00Z",
       newMessageId: () => "m_1",
@@ -50,11 +51,19 @@ describe("runToolUse", () => {
 
   test("a garbled read never reaches the tool and never lists the workspace root", async () => {
     const { frames, exec } = harness();
-    const { block } = await runToolUse({ id: "t1", name: "read", input: {}, input_error: "the arguments were not valid JSON" }, exec);
+    const { block } = await runToolUse({ id: "t1", name: "read", input: {}, input_error: "Unexpected end of input", input_length: 1 }, exec);
 
     expect(block).toMatchObject({ type: "tool_result", tool_use_id: "t1", is_error: true });
     expect((block as { content: string }).content).toContain("was not run");
     expect(frames.some((f) => f.type === "tool_result" &&  f.is_error)).toBe(true);
+  });
+
+  test("arguments that weren't JSON say why and how many characters arrived, none when that wasn't counted", async () => {
+    const { exec } = harness();
+    const counted = await runToolUse({ id: "t1", name: "read", input: {}, input_error: "Unexpected end of input", input_length: 9 }, exec);
+    expect((counted.block as { content: string }).content).toContain("the arguments were not valid JSON (Unexpected end of input); 9 characters arrived");
+    const uncounted = await runToolUse({ id: "t2", name: "read", input: {}, input_error: "Unexpected end of input" }, exec);
+    expect((uncounted.block as { content: string }).content).toContain("the arguments were not valid JSON (Unexpected end of input); 0 characters arrived");
   });
 
   test("a call missing a required argument is refused before dispatch", async () => {
@@ -74,7 +83,7 @@ describe("runToolUse", () => {
 });
 
 test("each built-in tool takes its bounded arguments up to their bounds and refuses them one past", () => {
-  const takes = (tool: string, input: Record<string, unknown>): boolean => schemaViolation(BUILTIN_TOOL_SCHEMAS.get(tool), input) === undefined;
+  const takes = (tool: string, input: Record<string, unknown>): boolean => schemaViolation(new Texts(), BUILTIN_TOOL_SCHEMAS.get(tool), input) === undefined;
   const long = (n: number): string => "a".repeat(n);
   const edit = { file_path: "a", old_string: "a", new_string: "" };
   expect([

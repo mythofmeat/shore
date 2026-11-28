@@ -4,6 +4,7 @@ import { thinkingEnabled } from "../src/handler/generation.ts";
 import { buildRequest, buildRequestWithProviderKeys, MissingApiKey, providerOptionsFor, type ResolvedModel } from "../src/llm/request";
 import { type ProviderEntry } from "../src/llm/credentials";
 import type { ProviderOptions, ThinkingReplay } from "../src/llm/types";
+import { Texts } from "../src/texts/texts.ts";
 
 function model(over: Partial<ResolvedModel> = {}): ResolvedModel {
   return {
@@ -17,7 +18,7 @@ function model(over: Partial<ResolvedModel> = {}): ResolvedModel {
   } as unknown as ResolvedModel;
 }
 
-const INPUTS = { messages: [], replay: "all" as ThinkingReplay };
+const INPUTS = { texts: new Texts(), messages: [], replay: "all" as ThinkingReplay };
 
 describe("finding the key in the environment", () => {
 
@@ -115,5 +116,20 @@ describe("the settings a provider is handed with a request", () => {
       thinkingEnabled(undefined), thinkingEnabled({}), thinkingEnabled({ reasoning_budget_tokens: 0 }), thinkingEnabled({ reasoning_budget_tokens: 1 }),
       thinkingEnabled({ reasoning_effort: "low" }), thinkingEnabled({ reasoning_budget_tokens: 2048, thinking_enabled: false }), thinkingEnabled({ reasoning_effort: "high", thinking_enabled: false }),
     ]).toEqual([false, false, false, true, true, false, false]);
+  });
+});
+
+describe("what a built request carries", () => {
+  const built = (over: Partial<ResolvedModel>) => buildRequest(model({ api_key_env: "KEY", ...over }), INPUTS, { KEY: "sk" }).request;
+
+  test("its base URL, temperature and top_p when the model has them, and no such fields when it doesn't", () => {
+    const set = built({ base_url: "https://llm.example/v1", temperature: 0.4, top_p: 0.9 });
+    expect([set.base_url, set.temperature, set.top_p]).toEqual(["https://llm.example/v1", 0.4, 0.9]);
+    expect(["base_url", "temperature", "top_p"].filter((key) => key in built({}))).toEqual([]);
+    expect(built({ temperature: 0 }).temperature).toBe(0);
+  });
+
+  test("a NanoGPT model on the Gemini sdk is refused before any request is made", () => {
+    expect(() => built({ provider_key: "nanogpt", sdk: "gemini" })).toThrow("NanoGPT does not expose the native Gemini API");
   });
 });

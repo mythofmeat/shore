@@ -8,34 +8,31 @@ function oneLine(value: string): string {
   return value.replace(/\r/g, "\\r").replace(/\n/g, "\\n").replace(/\t/g, "\\t");
 }
 
-function heatmapText(value: HeatmapResult): string {
-  const lines = [`Activity over ${value.days} days: ${value.messages_in_window} messages (${value.total_messages} total)`];
-  if (value.messages_in_window === 0) return `${lines[0]}\nNo activity data in this window.`;
-  if (!value.has_sufficient_data) lines.push("Insufficient data for reliable activity patterns.");
-  lines.push(`Engagement: ${value.engagement_score.toFixed(2)}; sessions/day: ${value.sessions_per_day.toFixed(2)}`);
-  lines.push("", "Hour  Share   Activity");
-  for (const row of value.hours) {
-    lines.push(`${String(row.hour).padStart(2, "0")}    ${(row.density * 100).toFixed(1).padStart(5)}%  ${row.classification}`);
-  }
-  lines.push("", "Day  Messages  Share");
-  for (const row of value.weekdays) {
-    lines.push(`${row.weekday}  ${String(row.message_count).padStart(8)}  ${(row.density * 100).toFixed(1)}%`);
-  }
-  return lines.join("\n");
+function heatmapText(texts: Texts, value: HeatmapResult): string | undefined {
+  return texts.render("output_activity", {
+    days: String(value.days),
+    messages: String(value.messages_in_window),
+    total: String(value.total_messages),
+    empty: value.messages_in_window === 0 ? "yes" : undefined,
+    thin: value.has_sufficient_data ? undefined : "yes",
+    engagement: value.engagement_score.toFixed(2),
+    sessions: value.sessions_per_day.toFixed(2),
+    hours: value.hours.map((row) => `${String(row.hour).padStart(2, "0")}    ${(row.density * 100).toFixed(1).padStart(5)}%  ${row.classification}`).join("\n"),
+    weekdays: value.weekdays.map((row) => `${row.weekday}  ${String(row.message_count).padStart(8)}  ${(row.density * 100).toFixed(1)}%`).join("\n"),
+  });
 }
 
-function modelHistoryText(value: ModelHistoryResult): string {
-  const lines = [`Model history for ${oneLine(value.character)} (${value.time_zone})`];
+function modelHistoryText(texts: Texts, value: ModelHistoryResult): string | undefined {
   const range = value.time_range;
-  if (range.start_time || range.end_time) {
-    lines.push(`${range.start_time ?? "earliest"} to ${range.end_time ?? "latest"} (inclusive)`);
-  }
-  if (value.models.length === 0) return [...lines, "No model usage in this range."].join("\n");
-  lines.push("", "Model | Provider | Call type | Kind | Calls | First seen | Last seen");
-  for (const row of value.models) {
-    lines.push([row.model, row.provider, row.call_type, row.kind, String(row.calls), row.first_seen, row.last_seen].map(oneLine).join(" | "));
-  }
-  return lines.join("\n");
+  return texts.render("output_model_history", {
+    character: oneLine(value.character),
+    zone: value.time_zone,
+    range: range.start_time || range.end_time ? "yes" : undefined,
+    from: range.start_time ?? undefined,
+    to: range.end_time ?? undefined,
+    none: value.models.length === 0 ? "yes" : undefined,
+    rows: value.models.map((row) => [row.model, row.provider, row.call_type, row.kind, String(row.calls), row.first_seen, row.last_seen].map(oneLine).join(" | ")).join("\n"),
+  });
 }
 
 export function formatToolOutput(texts: Texts, name: string, value: unknown): string {
@@ -43,17 +40,19 @@ export function formatToolOutput(texts: Texts, name: string, value: unknown): st
   switch (name) {
     case "bash": {
       const result = value as BashResult;
-      const lines = [`bash: exit ${result.exit_code ?? "terminated by signal"}`, `workdir: ${oneLine(result.workdir)}`];
-      if (result.stdout) lines.push(result.stdout.replace(/\n$/, ""));
-      if (result.stderr) lines.push(`stderr:\n${result.stderr.replace(/\n$/, "")}`);
-      const reload = result.prompt_files_changed.length > 0 ? texts.render("prompt_reload", { files: result.prompt_files_changed.join(", ") }) : undefined;
-      if (reload !== undefined) lines.push(reload);
-      return lines.join("\n");
+      return texts.render("output_bash", {
+        code: result.exit_code === null ? undefined : String(result.exit_code),
+        workdir: oneLine(result.workdir),
+        printed: result.stdout === "" ? undefined : "yes",
+        stdout: result.stdout.replace(/\n$/, ""),
+        stderr: result.stderr === "" ? undefined : texts.render("tool_stderr", { stderr: result.stderr.replace(/\n$/, "") }),
+        reload: result.prompt_files_changed.length > 0 ? texts.render("prompt_reload", { files: result.prompt_files_changed.join(", ") }) : undefined,
+      }) ?? "";
     }
     case "activity_heatmap":
-      return heatmapText(value as HeatmapResult);
+      return heatmapText(texts, value as HeatmapResult) ?? "";
     case "model_history":
-      return modelHistoryText(value as ModelHistoryResult);
+      return modelHistoryText(texts, value as ModelHistoryResult) ?? "";
     default:
       return payloadText(value);
   }

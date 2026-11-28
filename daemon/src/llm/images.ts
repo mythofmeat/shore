@@ -2,7 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { namedByHash, sha256Hex } from "../engine/picture_files.ts";
-import type { ImageRef } from "../engine/types.ts";
+import type { ContentBlock, ImageRef } from "../engine/types.ts";
+import { Texts, type TextValues } from "../texts/texts.ts";
 import { base64Bytes } from "../util/base64.ts";
 
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -21,16 +22,32 @@ export interface ResolvedImage {
   base64: string;
 }
 
-export type ImageResolution = { image: ResolvedImage } | { omitted: string };
+export interface Omission {
+  reason: string;
+  values?: TextValues;
+}
 
-export function omissionNotice(label: string, reason: string): string {
-  return `[image omitted: ${label} — ${reason}]`;
+export type ImageResolution = { image: ResolvedImage } | { omitted: Omission };
+
+export function requestTexts(request: { texts?: Texts | undefined }): Texts {
+  return request.texts ?? new Texts();
+}
+
+export function omissionNotice(texts: Texts, image: string, omission: Omission): string | undefined {
+  return texts.render("image_omitted", { image, reason: texts.render(omission.reason, omission.values) });
+}
+
+export type ImagePlace = "image_in_message" | "image_in_tool_result";
+
+export function unnamedOmission(texts: Texts, place: ImagePlace, omission: Omission): ContentBlock[] {
+  const text = omissionNotice(texts, texts.render(place) ?? "", omission);
+  return text === undefined ? [] : [{ type: "text", text }];
 }
 
 const SUPPORTED_MIME = new Set(Object.values(MIME_BY_EXT));
 
-function tooLarge(bytes: number, maxBytes: number): string {
-  return `it is ${String(bytes)} bytes, over the ${String(maxBytes)}-byte limit`;
+function tooLarge(bytes: number, maxBytes: number): Omission {
+  return { reason: "image_too_big", values: { bytes: String(bytes), limit: String(maxBytes) } };
 }
 
 export function resolveImageBlock(
@@ -39,9 +56,9 @@ export function resolveImageBlock(
 ): ImageResolution {
   const mediaType = source.media_type?.toLowerCase();
   if (!mediaType || !SUPPORTED_MIME.has(mediaType)) {
-    return { omitted: `${source.media_type || "an unlabelled type"} is not a supported format` };
+    return { omitted: { reason: "image_type", values: { type: source.media_type } } };
   }
-  if (!source.data) return { omitted: "it carried no image data" };
+  if (!source.data) return { omitted: { reason: "image_no_data" } };
   const bytes = base64Bytes(source.data);
   if (bytes > maxBytes) return { omitted: tooLarge(bytes, maxBytes) };
   return { image: { mediaType, base64: source.data } };
@@ -53,7 +70,7 @@ export function resolveImage(
 ): ImageResolution {
   const mediaType = MIME_BY_EXT[path.extname(ref.path).toLowerCase()];
   if (!mediaType) {
-    return { omitted: `${path.extname(ref.path) || "no extension"} is not a supported format` };
+    return { omitted: { reason: "image_extension", values: { extension: path.extname(ref.path) } } };
   }
 
   if (ref.data !== undefined && ref.data.length > 0) {
@@ -66,10 +83,10 @@ export function resolveImage(
     const size = fs.statSync(ref.path).size;
     if (size > maxBytes) return { omitted: tooLarge(size, maxBytes) };
     const bytes = fs.readFileSync(ref.path);
-    if (ref.sha256 !== undefined && !namedByHash(ref.path, ref.sha256) && sha256Hex(bytes) !== ref.sha256) return { omitted: "the file has changed since it was shown" };
+    if (ref.sha256 !== undefined && !namedByHash(ref.path, ref.sha256) && sha256Hex(bytes) !== ref.sha256) return { omitted: { reason: "image_changed" } };
     return { image: { mediaType, base64: bytes.toString("base64") } };
   } catch (e) {
-    return { omitted: `it could not be read (${(e as Error).message})` };
+    return { omitted: { reason: "image_unreadable", values: { error: (e as Error).message } } };
   }
 }
 

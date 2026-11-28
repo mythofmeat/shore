@@ -1,6 +1,7 @@
 import { hostZone, normalizeToZone } from "../ledger/zoned.ts";
 import { parseTimeBound } from "./history.ts";
 import { InvalidArgs, ToolIoError } from "./errors.ts";
+import type { Texts } from "../texts/texts.ts";
 
 interface ModelHistoryRow {
   model: string;
@@ -30,31 +31,19 @@ export function kindFor(callType: string): string {
   }
 }
 
+const TO_THE_SECOND = 19;
+
+const OFFSET = 6;
+
 export function utcBound(
+  texts: Texts,
   input: Record<string, unknown>,
   field: string,
 ): string | undefined {
-  const bound = parseTimeBound(input, field);
+  const bound = parseTimeBound(texts, input, field);
   if (bound === undefined) return undefined;
-
-  const m = /^(.+?)([+-]\d{2}:\d{2})$/.exec(bound.rfc3339);
-  if (m === null) return bound.rfc3339;
-  const [, localPart, offset] = m as unknown as [string, string, string];
-
-  if (offset === "+00:00") return bound.rfc3339;
-
-  const dot = localPart.indexOf(".");
-  const secondsPart = dot === -1 ? localPart : localPart.slice(0, dot);
-  const fraction = dot === -1 ? "" : localPart.slice(dot);
-
-  const sign = offset.startsWith("-") ? -1 : 1;
-  const offsetMinutes =
-    sign * (Number(offset.slice(1, 3)) * 60 + Number(offset.slice(4, 6)));
-
-  const asIfUtc = Date.parse(`${secondsPart}Z`);
-  const shifted = new Date(asIfUtc - offsetMinutes * 60_000);
-  const iso = shifted.toISOString();
-  return `${iso.slice(0, 19)}${fraction}+00:00`;
+  const fraction = bound.rfc3339.slice(TO_THE_SECOND, -OFFSET);
+  return `${new Date(Math.floor(bound.ms / 1000) * 1000).toISOString().slice(0, TO_THE_SECOND)}${fraction}+00:00`;
 }
 
 export interface ModelHistoryResult {
@@ -78,22 +67,23 @@ export interface ModelHistoryResult {
 }
 
 export async function handleModelHistory(
+  texts: Texts,
   input: Record<string, unknown>,
   character: string,
   query: ModelHistoryQuery | undefined,
   timeZone: string = hostZone(),
 ): Promise<ModelHistoryResult> {
   if (query === undefined) {
-    throw new ToolIoError("the usage ledger is not available in this context");
+    throw new ToolIoError(texts.always("history_ledger_unavailable"));
   }
   if (character === "") {
-    throw new InvalidArgs("model history is not configured");
+    throw new InvalidArgs(texts.always("history_not_configured"));
   }
 
-  const since = utcBound(input, "start_time");
-  const until = utcBound(input, "end_time");
+  const since = utcBound(texts, input, "start_time");
+  const until = utcBound(texts, input, "end_time");
   if (since !== undefined && until !== undefined && since > until) {
-    throw new InvalidArgs("start_time must be before or equal to end_time");
+    throw new InvalidArgs(texts.always("history_range_backwards"));
   }
 
   const rows = await query(character, since, until);

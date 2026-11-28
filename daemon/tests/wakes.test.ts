@@ -55,6 +55,8 @@ import { testTmp } from "./support/tmp.ts";
 import { promptedAppConfig } from "./support/prompt_list.ts";
 import { Texts } from "../src/texts/texts.ts";
 import { parameterText, TEXT_SPECS, TEXTS, toolText, type TextSpec } from "../src/texts/registry.ts";
+import { seenWordings } from "../src/texts/seen.ts";
+import { writeState } from "../src/storage/store.ts";
 import { ALL_TOOLS } from "../src/tools/registry.ts";
 
 const MINUTE = 60_000;
@@ -1489,6 +1491,22 @@ test("the character's triggers run whenever they are switched on, a check only w
     await runtime.triggers.tick();
     expect(existsSync(join(workspace, "ran"))).toBe(true);
   }, withTriggers);
+});
+
+test("why a trigger isn't running is told in the character's own words for it", async () => {
+  const root = await mkdtemp(testTmp("shore-wakes-"));
+  await mkdir(join(root, "config"), { recursive: true });
+  await writeFile(join(root, "config", "stopped.md"), "`{{name}}` is stopped: {{problem}}\n");
+  await writeFile(join(root, "config", "no_bash.md"), "you can't run checks\n");
+  at(0);
+  await withCharacter(async ({ runtime, workspace, say }) => {
+    await writeFile(join(workspace, "TRIGGERS.toml"), TOUCH);
+    await say("hello");
+    await looks(runtime);
+    expect((await runtime.triggers.view("ada")).problems).toEqual(["`touch` is stopped: you can't run checks"]);
+  }, (app) => {
+    app.texts = { trigger_file_not_running: "stopped.md", trigger_file_no_bash: "no_bash.md" };
+  }, root);
 });
 
 test("the user's settings reach the character's triggers: a longer cooldown, a shorter check limit, and a trigger switched off by name", async () => {
@@ -4410,7 +4428,7 @@ test("a message is counted once in the character's activity record, whether it i
   }, undefined, root);
 });
 
-const MARKED = TEXTS.filter((spec) => !spec.fixed);
+const MARKED = TEXTS;
 
 function declared(spec: TextSpec): string[] {
   return Object.keys(spec.values).filter((value) => value !== "<tool>");
@@ -4495,7 +4513,7 @@ test("with every text Shore writes pointed at a marker, a reply carrying every k
         "here is the lamp", "thank you", "one from before", "tell me a story in parts", "go on", "wait, what is the fox called?",
         "I was waiting for you.", "It glows: ![[nowhere.png]]", "I lit it while you were away.", "You're welcome.", "I remember.",
         "reply to: tell me a story in parts", "reply to: go on", "reply to: wait, what is the fox called?", "reply to: thank you", "reply to: one from before",
-        "Let me look.", "Done.", `${join(workspace, "SOUL.md")}: lines 1–1\n1\tAda\nEnd of file.`, SOUL_READ, "Ada",
+        "Let me look.", "Done.", "1\tAda", SOUL_READ, "Ada",
       ].sort((a, b) => b.length - a.length);
       const requests = [...script.replies, ...script.wakes];
       expect(script.wakes.length).toBeGreaterThanOrEqual(2);
@@ -4517,7 +4535,7 @@ test("with every text Shore writes pointed at a marker, a reply carrying every k
   const toolTexts = ALL_TOOLS.flatMap((tool) => [toolText(tool.name), ...Object.keys((tool.parameters as { properties: Record<string, unknown> }).properties).map((parameter) => parameterText(tool.name, parameter))]);
   expect([...given.keys()].filter((name) => !toolTexts.includes(name)).sort()).toEqual([
     "digest_first", "digest_user", "digest_you", "fired_trigger", "last_wake_interrupted", "last_wrote_here", "last_wrote_home",
-    "opened_by_you", "picture", "picture_gone", "pictures_not_sent", "pinned_file", "sent_picture", "status", "status_cleared", "status_item",
+    "opened_by_you", "picture", "picture_gone", "picture_send_problem", "pictures_not_sent", "pinned_file", "read_end", "read_line_cut", "read_lines", "sent_picture", "status", "status_cleared", "status_item",
     "stopped_interrupted", "thread", "thread_pins", "time", "time_later", "wake", "wake_opener", "wake_opener_kept", "wake_running", "wake_running_own_time",
     "wake_status", "wake_turn", "working_kept", "working_kept_unfinished",
   ].sort());
@@ -4547,5 +4565,17 @@ test("a wake whose text the user pointed at a file that can't be read is skipped
     expect(runtime.autonomy.log("ada", 10).map((event) => [event.kind, event.detail]).at(-1)).toEqual([
       "call_failed", `Wake skipped: text "wake" could not be read at ${missing}: ENOENT: no such file or directory, open '${missing}'`,
     ]);
+  });
+});
+
+test("a runtime keeps the wording it first runs with, the list shows Shore's texts an update reworded until they are marked seen, and marking them seen answers with the list as it is now", async () => {
+  await withCharacter(async ({ data, command }) => {
+    expect(seenWordings(data)).toEqual(Object.fromEntries(TEXTS.map((spec) => [spec.name, spec.shipped])));
+    writeState(data, "texts_seen.json", JSON.stringify({ ...seenWordings(data), wake: "Wake up." }));
+    const listed = async (name: string) => (await command(name, {}) as unknown as { data: { texts: { name: string; changed: boolean; previous: string | null }[] } }).data.texts;
+    expect((await listed("texts")).filter((text) => text.changed).map((text) => [text.name, text.previous])).toEqual([["wake", "Wake up."]]);
+    expect((await listed("texts_seen")).filter((text) => text.changed)).toEqual([]);
+    expect((await listed("texts")).filter((text) => text.changed)).toEqual([]);
+    expect(seenWordings(data)?.["wake"]).toBe(required(TEXT_SPECS.get("wake")).shipped);
   });
 });

@@ -31,16 +31,16 @@ async function refused(work: Promise<unknown> | (() => unknown)): Promise<string
 
 test("a tool with actions takes one of them, and says which action a field given to the wrong one goes with", async () => {
   const takes = { list: [], start: ["name", "label", "opening"], edit: ["name", "label"] } as const;
-  expect(actionOf({ action: "list" }, takes)).toBe("list");
-  expect(actionOf({ action: "start", name: "ring", label: "Ring", opening: "hello" }, takes)).toBe("start");
-  expect(actionOf({ action: "edit", name: "ring", colour: "red" }, takes)).toBe("edit");
+  expect(actionOf(new Texts(), { action: "list" }, takes)).toBe("list");
+  expect(actionOf(new Texts(), { action: "start", name: "ring", label: "Ring", opening: "hello" }, takes)).toBe("start");
+  expect(actionOf(new Texts(), { action: "edit", name: "ring", colour: "red" }, takes)).toBe("edit");
   const wrong = "invalid args: action must be one of list, start, edit";
-  expect(await refused(() => actionOf({}, takes))).toBe(wrong);
-  expect(await refused(() => actionOf({ action: "remove" }, takes))).toBe(wrong);
-  expect(await refused(() => actionOf({ action: 5 }, takes))).toBe(wrong);
-  expect(await refused(() => actionOf({ action: "list", name: "ring" }, takes))).toBe("invalid args: `name` goes with `start` or `edit`, not `list`");
-  expect(await refused(() => actionOf({ action: "edit", name: "ring", opening: "hello" }, takes))).toBe("invalid args: `opening` goes with `start`, not `edit`");
-  expect(await refused(() => actionOf({ action: "list", label: "Ring", opening: "hello" }, takes))).toBe(
+  expect(await refused(() => actionOf(new Texts(), {}, takes))).toBe(wrong);
+  expect(await refused(() => actionOf(new Texts(), { action: "remove" }, takes))).toBe(wrong);
+  expect(await refused(() => actionOf(new Texts(), { action: 5 }, takes))).toBe(wrong);
+  expect(await refused(() => actionOf(new Texts(), { action: "list", name: "ring" }, takes))).toBe("invalid args: `name` goes with `start` or `edit`, not `list`");
+  expect(await refused(() => actionOf(new Texts(), { action: "edit", name: "ring", opening: "hello" }, takes))).toBe("invalid args: `opening` goes with `start`, not `edit`");
+  expect(await refused(() => actionOf(new Texts(), { action: "list", label: "Ring", opening: "hello" }, takes))).toBe(
     "invalid args: `label` goes with `start` or `edit`, not `list`; `opening` goes with `start`, not `list`",
   );
 });
@@ -121,7 +121,7 @@ test("a dry run lists threads but starts, seals and edits none", async () => {
 
 test("a call under one of the six old names isn't run, and is told which tool it is part of now when the character has that tool", () => {
   const offered = (...names: string[]) => schemasFrom(renderToolDefs(new Texts(), { enabled: names }, "ada", "eve"));
-  const rejected = (name: string, schemas: ToolSchemas | undefined) => argumentRejection({ id: "t1", name, input: {} }, schemas);
+  const rejected = (name: string, schemas: ToolSchemas | undefined) => argumentRejection(new Texts(), { id: "t1", name, input: {} }, schemas);
   const both = offered("threads", "chat_logs", "read");
   for (const [was, now] of [["list_threads", "threads"], ["start_thread", "threads"], ["start_sealed_thread", "threads"], ["edit_thread", "threads"], ["search_chat_logs", "chat_logs"], ["read_chat_logs", "chat_logs"]] as const) {
     expect(rejected(was, both)).toBe(
@@ -136,9 +136,9 @@ test("a call under one of the six old names isn't run, and is told which tool it
   expect(rejected("search_chat_logs", offered("threads"))).toBe(unavailable("search_chat_logs"));
   expect(rejected("frobnicate", both)).toBe(unavailable("frobnicate"));
   expect(rejected("threads", both)).toStartWith("The call to threads was not run because the required argument `action` was missing.");
-  expect(argumentRejection({ id: "t1", name: "chat_logs", input: { action: "search", query: "Mara", colour: "red" } }, both)).toStartWith("The call to chat_logs was not run because argument `colour` is not allowed.");
-  expect(argumentRejection({ id: "t1", name: "chat_logs", input: { action: "search", query: "Mara" } }, both)).toBeUndefined();
-  expect(argumentRejection({ id: "t1", name: "threads", input: { action: "list" } }, both)).toBeUndefined();
+  expect(argumentRejection(new Texts(), { id: "t1", name: "chat_logs", input: { action: "search", query: "Mara", colour: "red" } }, both)).toStartWith("The call to chat_logs was not run because argument `colour` is not allowed.");
+  expect(argumentRejection(new Texts(), { id: "t1", name: "chat_logs", input: { action: "search", query: "Mara" } }, both)).toBeUndefined();
+  expect(argumentRejection(new Texts(), { id: "t1", name: "threads", input: { action: "list" } }, both)).toBeUndefined();
   expect(rejected("list_threads", undefined)).toBeUndefined();
 });
 
@@ -154,7 +154,7 @@ test("send_message takes what to say, a thread's id and whether to push, and can
   asked.length = 1;
 
   const schemas = schemasFrom(renderToolDefs(new Texts(), { enabled: ["send_message"] }, "ada", "eve"));
-  const rejected = (input: Record<string, unknown>) => argumentRejection({ id: "t1", name: "send_message", input }, schemas);
+  const rejected = (input: Record<string, unknown>) => argumentRejection(new Texts(), { id: "t1", name: "send_message", input }, schemas);
   expect(rejected({ text: "!" })).toBeUndefined();
   expect(rejected({ text: "Hello.", thread: "g" })).toBeUndefined();
   expect(rejected({ text: "Hello.", thread: "g".repeat(64) })).toBeUndefined();

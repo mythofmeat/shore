@@ -2,6 +2,7 @@ import type { ContentBlock } from "../engine/types.ts";
 import type { UsageConfig } from "../ledger/budget.ts";
 import { isAbortError, isTimeoutError } from "./abort.ts";
 import { retryAfterMsFromError } from "./retry_after.ts";
+import type { Texts } from "../texts/texts.ts";
 
 export type Sdk =
   | "anthropic"
@@ -117,6 +118,7 @@ export interface CallContext {
 }
 
 export interface SidecarRequest {
+  texts?: Texts;
   supports_images?: boolean;
   sdk: Sdk;
   model: string;
@@ -157,7 +159,7 @@ export type StreamEvent =
   | { type: "reasoning_details"; details: unknown[] }
   | { type: "reasoning_content"; reasoning: string }
   | { type: "redacted_thinking"; data: string }
-  | { type: "tool_use"; id: string; name: string; input: unknown; thought_signature?: string; input_error?: string }
+  | { type: "tool_use"; id: string; name: string; input: unknown; thought_signature?: string; input_error?: string; input_length?: number }
   | {
       type: "done";
       content: string;

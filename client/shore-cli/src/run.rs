@@ -452,7 +452,7 @@ async fn handle_generic_swp_command(
         output::config::print_check(&data);
     } else if name == "tools" {
         output::tools::print(&data);
-    } else if name == "texts" {
+    } else if name == "texts" || name == "texts_seen" {
         output::texts::print(&data, texts_name(other))?;
     } else if name == "thread_prompt" || name == "thread_prompt_refresh" {
         output::thread_prompt::print(&data)?;

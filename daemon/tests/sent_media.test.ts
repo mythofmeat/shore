@@ -12,6 +12,7 @@ import { handleRead } from "../src/tools/read.ts";
 import * as workspaceNames from "../src/tools/workspace_names.ts";
 import { animatedPng, noisePng, transparentPng, withTextChunk } from "./support/test_images.ts";
 import { testTmp } from "./support/tmp.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 const MB = 1024 * 1024;
 
@@ -135,6 +136,76 @@ test("a reply stopped while its pictures are looked up keeps none of them, wheth
   expect(await readdir(sent)).toEqual([]);
 });
 
+test("pictures the workspace can't be searched for, or one found but not read, are kept back with why", async () => {
+  const { dir, sender } = await world();
+  await writeFile(join(dir, "harbor.png"), transparentPng(4, 4));
+  const call = sender.workspace.call.bind(sender.workspace);
+  const helper = spyOn(sender.workspace, "call").mockRejectedValueOnce(new Error("the helper is gone"));
+  try {
+    expect((await sendPictures(["![[harbor]] ![[tide]]"], sender)).map(({ embed, problem }) => ({ embed, problem }))).toEqual([
+      { embed: "![[harbor]]", problem: "the workspace could not be searched: the helper is gone" },
+      { embed: "![[tide]]", problem: "the workspace could not be searched: the helper is gone" },
+    ]);
+    helper.mockImplementation((async (op: string, args: never, signal?: AbortSignal) => op === "readFiles" ? [{ error: { message: "the disk is gone" } }] : await call(op as never, args, signal)) as never);
+    expect((await sendPictures(["![[harbor]]"], sender)).map(({ problem }) => problem)).toEqual(["it could not be sent: the disk is gone"]);
+  } finally {
+    helper.mockRestore();
+  }
+});
+
+test("only the first ten pictures in a message are sent, the rest saying so, and a link that names no file is left alone", async () => {
+  const { dir, sender } = await world();
+  for (let n = 1; n <= 11; n += 1) await writeFile(join(dir, `p${String(n)}.png`), transparentPng(2, 2));
+  const text = Array.from({ length: 11 }, (_, n) => `![[p${String(n + 1)}]]`).join(" ");
+  expect(await pictureProblems([text], sender.workspace)).toEqual(["![[p11]]: only the first 10 pictures in a message are sent"]);
+  const images = await sendPictures([text], sender);
+  expect(images.map(({ problem }) => problem)).toEqual([...Array.from({ length: 10 }, () => undefined), "only the first 10 pictures in a message are sent"]);
+  expect(await sendPictures(["see ![[#top]]"], sender)).toEqual([]);
+  expect(await pictureProblems(["see ![[#top]]"], sender.workspace)).toEqual([]);
+});
+
+test("a message with no pictures in it doesn't look in the workspace at all", async () => {
+  const { sender } = await world();
+  const helper = spyOn(sender.workspace, "call");
+  try {
+    expect(await sendPictures(["just words"], sender)).toEqual([]);
+    expect(await pictureProblems(["just words"], sender.workspace)).toEqual([]);
+    expect(helper).not.toHaveBeenCalled();
+  } finally {
+    helper.mockRestore();
+  }
+});
+
+test("a picture whose file turns out not to be one, or can't be read and says no more, is kept back with why, and a stop while it is kept is passed on", async () => {
+  const { dir, sender } = await world();
+  await writeFile(join(dir, "harbor.png"), transparentPng(4, 4));
+  const call = sender.workspace.call.bind(sender.workspace);
+  const read = (answer: unknown, before?: () => void) => spyOn(sender.workspace, "call").mockImplementation((async (op: string, args: never, signal?: AbortSignal) => {
+    if (op !== "readFiles") return await call(op as never, args, signal);
+    before?.();
+    return answer;
+  }) as never);
+  const notPicture = read([{ data: Buffer.from("plain text here").toString("base64") }]);
+  try {
+    expect((await sendPictures(["![[harbor]]"], sender)).map(({ problem }) => problem)).toEqual(["it could not be sent: it is not a PNG, JPEG, GIF or WebP picture, or an MP4 or WebM video"]);
+  } finally {
+    notPicture.mockRestore();
+  }
+  const silent = read([{ error: {} }]);
+  try {
+    expect((await sendPictures(["![[harbor]]"], sender)).map(({ problem }) => problem)).toEqual(["it could not be sent: it could not be read"]);
+  } finally {
+    silent.mockRestore();
+  }
+  const stop = new AbortController();
+  const stopped = read([{ error: { message: "interrupted" } }], () => { stop.abort(new Error("the reply was stopped")); });
+  try {
+    expect(await refusal(sendPictures(["![[harbor]]"], sender, stop.signal))).toBe("Error: the reply was stopped");
+  } finally {
+    stopped.mockRestore();
+  }
+});
+
 test("an animated PNG can go by the name its tools give it", async () => {
   const { dir, sender } = await world();
   await writeFile(join(dir, "loop.apng"), animatedPng(transparentPng(16, 16)));
@@ -158,7 +229,7 @@ test("reading a note shows pictures only: a video it embeds is reported, not rea
   const { dir } = await world();
   await writeFile(join(dir, "clip.mp4"), Buffer.concat([mp4Header(), Buffer.alloc(64)]));
   await writeFile(join(dir, "note.md"), "see ![[clip.mp4]]\n");
-  const page = toolMediaOf(await handleRead({ file_path: "note.md" }, dir));
+  const page = toolMediaOf(await handleRead({ file_path: "note.md" }, dir, new Texts()));
   expect(page?.media).toEqual([]);
   expect(JSON.stringify(page)).toContain("clip.mp4 is not a picture");
 });
@@ -166,5 +237,5 @@ test("reading a note shows pictures only: a video it embeds is reported, not rea
 test("reading a video that can't be decoded says so instead of reading it as text", async () => {
   const { dir } = await world();
   await writeFile(join(dir, "clip.mp4"), Buffer.concat([mp4Header(), Buffer.alloc(64)]));
-  expect(await refusal(handleRead({ file_path: "clip.mp4" }, dir))).toContain("its first frame could not be read");
+  expect(await refusal(handleRead({ file_path: "clip.mp4" }, dir, new Texts()))).toContain("its first frame could not be read");
 });

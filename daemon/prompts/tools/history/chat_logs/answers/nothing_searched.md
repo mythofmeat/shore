@@ -1,0 +1,1 @@
+{{#if span}}Searched {{messages}} messages from every thread, {{span}}. This thread's messages in your context aren't searched.{{else}}There is nothing to search yet; this thread's messages in your context aren't searched.{{/if}}

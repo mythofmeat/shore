@@ -1,0 +1,1 @@
+[{{label}}: reduced from {{original}} to {{sent}}{{#if first_frame}}, first frame only{{/if}}.{{#if offer}}{{#if path}} Read {{path}} with original: true for the full image.{{else}} Read it with original: true for the full image.{{/if}}{{/if}}]

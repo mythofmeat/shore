@@ -8,6 +8,7 @@ import { parseTriggers } from "../src/autonomy/triggers.ts";
 import { status, type StatusContext } from "../src/commands/status.ts";
 import { Diagnostics } from "../src/diagnostics.ts";
 import { testTmp } from "./support/tmp.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 const NOW = Date.UTC(2026, 10, 18, 12);
 const HOUR = 3_600_000;
@@ -58,7 +59,7 @@ const FILE = [
 ].join("\n\n");
 
 function triggers(enabled = true): TriggersView {
-  const parsed = parseTriggers(FILE, HOUR);
+  const parsed = parseTriggers(new Texts(), FILE, HOUR);
   const next: Record<string, Partial<TriggerView>> = {
     tide: { nextAt: NOW + 10 * 60_000 },
     lamp: { nextAt: NOW + HOUR, fired: 2, lastFiredAt: NOW - HOUR },

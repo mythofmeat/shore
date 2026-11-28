@@ -19,6 +19,7 @@ import type { Message } from "./types.ts";
 import { forgetThreadSessions } from "../llm/providers/agent_sessions.ts";
 import { archiveAndRetain } from "../memory/compaction/archive.ts";
 import { normalizeWorkspacePath, pathComponents, WORKSPACE_LINK } from "../tools/workspace_path.ts";
+import { Texts, type TextValues } from "../texts/texts.ts";
 
 export const MAX_THREAD_ID_LENGTH = 64;
 
@@ -28,14 +29,28 @@ const THREAD_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 export type ThreadErrorKind = "invalid_id" | "invalid_pins" | "invalid_folder" | "invalid_seal" | "exists" | "not_found" | "is_home" | "is_wakes" | "is_pinned" | "locked" | "on_hold" | "archived" | "not_archived";
 
+export interface ThreadErrorText {
+  name: string;
+  values: TextValues;
+}
+
 export class ThreadError extends Error {
   constructor(
     readonly kind: ThreadErrorKind,
     message: string,
+    readonly text?: ThreadErrorText,
   ) {
     super(message);
     this.name = "ThreadError";
   }
+}
+
+export function threadRefusal(kind: ThreadErrorKind, name: string, values: TextValues = {}): ThreadError {
+  return new ThreadError(kind, new Texts().always(name, values), { name, values });
+}
+
+export function threadErrorText(texts: Texts, error: ThreadError): string {
+  return error.text === undefined ? error.message : texts.always(error.text.name, error.text.values);
 }
 
 export function isValidThreadId(id: string): boolean {
@@ -118,7 +133,7 @@ export function requireNameFree(index: ThreadsIndex, character: string, id: stri
   const taken = threadRecord(index, id);
   if (taken?.archived !== undefined) throw new ThreadError("archived", `thread ${JSON.stringify(id)} already exists for ${character}, archived`);
   if (taken?.on_hold === true) throw new ThreadError("on_hold", `thread ${JSON.stringify(id)} already exists for ${character}, on hold`);
-  if (taken !== undefined) throw new ThreadError("exists", `thread ${JSON.stringify(id)} already exists for ${character}`);
+  if (taken !== undefined) throw threadRefusal("exists", "threads_exists", { thread: JSON.stringify(id), character });
 }
 
 export function threadModelOf(
@@ -491,21 +506,17 @@ export function pinnedCommand(pin: string): string | undefined {
 
 function commandPin(raw: string): string {
   const command = raw.slice(COMMAND_PIN.length).trim();
-  if (command === "") throw new ThreadError("invalid_pins", "a command pin has nothing after its !");
-  if (/[\r\n\0]/.test(command)) throw new ThreadError("invalid_pins", `the command pin ${JSON.stringify(raw)} must be a single line`);
+  if (command === "") throw threadRefusal("invalid_pins", "threads_pin_command_empty");
+  if (/[\r\n\0]/.test(command)) throw threadRefusal("invalid_pins", "threads_pin_command_lines", { pin: JSON.stringify(raw) });
   return `${COMMAND_PIN}${command}`;
 }
 
 function filePin(raw: string): string {
   const parts = pathComponents(normalizeWorkspacePath(raw));
-  if (parts.length === 0) throw new ThreadError("invalid_pins", "a pinned file's path is empty");
-  if (parts.includes("..")) {
-    throw new ThreadError("invalid_pins", `the pinned file ${JSON.stringify(raw)} leaves the workspace`);
-  }
+  if (parts.length === 0) throw threadRefusal("invalid_pins", "threads_pin_path_empty");
+  if (parts.includes("..")) throw threadRefusal("invalid_pins", "threads_pin_leaves", { pin: JSON.stringify(raw) });
   const path = parts.join("/");
-  if (path.startsWith(COMMAND_PIN)) {
-    throw new ThreadError("invalid_pins", `${path} can't be pinned, because a pin that starts with ${COMMAND_PIN} is a command`);
-  }
+  if (path.startsWith(COMMAND_PIN)) throw threadRefusal("invalid_pins", "threads_pin_bang", { path });
   return path;
 }
 
@@ -516,21 +527,20 @@ function threadPin(raw: string): string {
 
 export function threadPins(pins: readonly string[]): string[] {
   const valid = [...new Set(pins.map(threadPin))];
-  if (valid.length > MAX_THREAD_PINS) {
-    throw new ThreadError("invalid_pins", `a thread can have at most ${String(MAX_THREAD_PINS)} pins`);
-  }
+  if (valid.length > MAX_THREAD_PINS) throw threadRefusal("invalid_pins", "threads_pins_too_many", { count: String(MAX_THREAD_PINS) });
   return valid;
 }
 
 export function refuseCommandPins(pins: readonly string[], kept: readonly string[]): void {
   const added = pins.filter((pin) => pinnedCommand(pin) !== undefined && !kept.includes(pin));
   if (added.length === 0) return;
-  throw new ThreadError("invalid_pins", `nothing changed, because a command pin runs in a shell and you have no bash tool: ${added.join(", ")}`);
+  throw threadRefusal("invalid_pins", "threads_pins_no_bash", { pins: added.join(", ") });
 }
 
 export type LocateFiles = (files: string[]) => Promise<{ paths: string[]; problems: string[] }>;
 
 export async function resolveThreadPins(
+  texts: Texts,
   pins: readonly string[],
   locate: LocateFiles,
   promptFiles: readonly string[],
@@ -546,19 +556,17 @@ export async function resolveThreadPins(
     try {
       requested.push(filePin(pin));
     } catch (e) {
-      problems.push((e as Error).message);
+      problems.push(threadErrorText(texts, e as ThreadError));
     }
   }
   const located = await locate(requested.filter((pin) => !pin.startsWith(COMMAND_PIN)));
   problems.push(...located.problems);
   for (const path of located.paths) {
-    if (promptFiles.includes(filePin(path))) problems.push(`${path} is already in every thread's prompt`);
+    if (promptFiles.includes(filePin(path))) problems.push(texts.always("threads_pin_in_prompt", { path }));
   }
   if (problems.length > 0) {
-    throw new ThreadError(
-      "invalid_pins",
-      `nothing changed, because ${problems.length === 1 ? "a pin" : "these pins"} can't be loaded:\n${problems.map((problem) => `- ${problem}`).join("\n")}`,
-    );
+    const values = { one: problems.length === 1 ? "yes" : undefined, problems: problems.map((problem) => `- ${problem}`).join("\n") };
+    throw new ThreadError("invalid_pins", texts.always("threads_pins_unloadable", values), { name: "threads_pins_unloadable", values });
   }
   let next = 0;
   return threadPins(requested.map((pin) => pin.startsWith(COMMAND_PIN) ? pin : filePin(required(located.paths[next++]))));
@@ -760,13 +768,8 @@ export interface ThreadEdit {
 
 export function requireEditableByCharacter(index: ThreadsIndex, character: string, id: string): ThreadRecord {
   const record = requireThread(index, character, id);
-  if (threadAway(record) !== undefined) throw new ThreadError("not_found", `no thread ${JSON.stringify(id)} for ${character}`);
-  if (record.id === homeThread(index)) {
-    throw new ThreadError(
-      "is_home",
-      `thread ${JSON.stringify(id)} is the home thread for ${character}, so only the user changes its label and pins, and its prompt shows no purpose`,
-    );
-  }
+  if (threadAway(record) !== undefined) throw threadRefusal("not_found", "threads_not_found", { thread: JSON.stringify(id), character });
+  if (record.id === homeThread(index)) throw threadRefusal("is_home", "threads_home_edit", { thread: JSON.stringify(id), character });
   if (record.locked === true) {
     throw new ThreadError("locked", `thread ${JSON.stringify(id)} is locked, so only the user changes its label, purpose and pins`);
   }

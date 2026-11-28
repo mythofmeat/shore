@@ -11,6 +11,7 @@ import type {
   SidecarRequest,
   StreamEvent,
 } from "../src/llm/types.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 const SECRET = "sk-ant-api03-notarealkey";
 
@@ -140,6 +141,38 @@ describe("what lands on disk", () => {
       expect(payload?.request).not.toContain(SECRET);
       expect(payload?.response ?? "").not.toContain(SECRET);
       expect(JSON.stringify(calls[0])).not.toContain(SECRET);
+    } finally {
+      store.close();
+    }
+  });
+
+  test("a captured call whose request can't be written down says so and names the model", async () => {
+    const store = CallStore.openInMemory();
+    try {
+      const captured = withCallCapture(provider(), store);
+      const looped: Record<string, unknown> = {};
+      looped["self"] = looped;
+      for await (const _event of captured.stream({ ...request(), metadata: looped } as never)) {
+        void _event;
+      }
+      const payload = store.getCall(required(store.queryCalls({ limit: 1 })[0]).id);
+      expect(JSON.parse(payload?.request ?? "{}")).toEqual({ error: "request not serializable", sdk: request().sdk, model: request().model });
+    } finally {
+      store.close();
+    }
+  });
+
+  test("a captured call holds the request as sent, without the texts it carries for its provider", async () => {
+    const store = CallStore.openInMemory();
+    try {
+      const captured = withCallCapture(provider(), store);
+      for await (const _event of captured.stream({ ...request(), texts: new Texts() })) {
+        void _event;
+      }
+      const payload = store.getCall(required(store.queryCalls({ limit: 1 })[0]).id);
+      const body = JSON.parse(payload?.request ?? "{}") as Record<string, unknown>;
+      expect(Object.keys(body)).not.toContain("texts");
+      expect(body["model"]).toBe(request().model);
     } finally {
       store.close();
     }

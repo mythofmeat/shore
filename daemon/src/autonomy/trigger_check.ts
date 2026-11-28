@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { BASH_ARGS, bashEnvironment } from "../tools/bash.ts";
 import type { CharacterWorkspace } from "../tools/character_workspace.ts";
 import type { ProcessOutput } from "../tools/process.ts";
+import type { Texts } from "../texts/texts.ts";
 
 export const CHECK_OUTPUT_CHARS = 2000;
 
@@ -24,13 +25,16 @@ export interface CheckRun {
   signal?: AbortSignal | undefined;
 }
 
-function cut(text: string, limit: number): string {
+function cut(texts: Texts, text: string, limit: number): string {
   const chars = Array.from(text);
-  return chars.length > limit ? `${chars.slice(0, limit).join("")}… [cut]` : text;
+  if (chars.length <= limit) return text;
+  const kept = chars.slice(0, limit).join("");
+  return texts.render("check_cut", { text: kept }) ?? kept;
 }
 
 export async function runCheck(run: CheckRun): Promise<CheckOutcome> {
   const root = resolve(run.workspace.dir);
+  const texts = run.workspace.texts;
   const limit = AbortSignal.timeout(run.limitMs);
   let output: ProcessOutput;
   try {
@@ -42,13 +46,13 @@ export async function runCheck(run: CheckRun): Promise<CheckOutcome> {
     });
   } catch (error) {
     if (run.signal?.aborted === true) throw error;
-    if (limit.aborted) return { kind: "failed", problem: "it was still running at its time limit and was stopped" };
-    return { kind: "failed", problem: `it could not be run: ${error instanceof Error ? error.message : String(error)}` };
+    if (limit.aborted) return { kind: "failed", problem: texts.always("check_timed_out") };
+    return { kind: "failed", problem: texts.always("check_not_run", { error: error instanceof Error ? error.message : String(error) }) };
   }
   if (output.code !== 0) {
     const said = output.stderr.trim();
-    return { kind: "failed", problem: `it exited with status ${String(output.code)}${said === "" ? "" : `: ${cut(said, CHECK_ERROR_CHARS)}`}` };
+    return { kind: "failed", problem: texts.always("check_failed", { code: String(output.code), said: said === "" ? undefined : cut(texts, said, CHECK_ERROR_CHARS) }) };
   }
   const said = output.stdout.trim();
-  return said === "" ? { kind: "quiet" } : { kind: "fired", output: cut(said, CHECK_OUTPUT_CHARS) };
+  return said === "" ? { kind: "quiet" } : { kind: "fired", output: cut(texts, said, CHECK_OUTPUT_CHARS) };
 }

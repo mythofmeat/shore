@@ -1,5 +1,6 @@
 import { readdir, readlink } from "node:fs/promises";
 import { join } from "node:path";
+import type { Texts } from "../texts/texts.ts";
 
 const MAX_ENTRIES = 2000;
 
@@ -37,13 +38,16 @@ async function walk(path: string, indent: string, listing: Listing, budget: numb
   }
 }
 
-export async function readFolder(path: string, budget: number, signal?: AbortSignal): Promise<{ text: string; cut: boolean }> {
+function counted(count: number, one: string): string {
+  return `${String(count)} ${one}${count === 1 ? "" : "s"}`;
+}
+
+export async function readFolder(texts: Texts, path: string, budget: number, signal?: AbortSignal): Promise<{ text: string; cut: boolean }> {
   const listing: Listing = { lines: [], folders: 0, files: 0, hidden: 0, cut: false, chars: 0 };
   await walk(path, "", listing, budget, signal);
-  const header = `${path.endsWith("/") ? path : `${path}/`}: folder`;
+  const header = texts.render("read_folder", { path: path.endsWith("/") ? path : `${path}/` });
   const footer = listing.cut
-    ? `[Listing cut off after ${String(listing.lines.length)} entries; read a subfolder to see the rest.]`
-    : `${String(listing.folders)} folder${listing.folders === 1 ? "" : "s"}, ${String(listing.files)} file${listing.files === 1 ? "" : "s"}`
-      + (listing.hidden > 0 ? `; ${String(listing.hidden)} hidden not shown, read them by path` : "");
-  return { text: [header, ...listing.lines, footer].join("\n"), cut: listing.cut };
+    ? texts.render("read_folder_cut", { entries: String(listing.lines.length) })
+    : texts.render("read_folder_counts", { folders: counted(listing.folders, "folder"), files: counted(listing.files, "file"), hidden: listing.hidden > 0 ? String(listing.hidden) : undefined });
+  return { text: [header, ...listing.lines, footer].filter((line) => line !== undefined).join("\n"), cut: listing.cut };
 }

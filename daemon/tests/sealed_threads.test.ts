@@ -124,9 +124,9 @@ test("the character's other turns are told of a sealed thread only its name, its
 });
 
 test("the tool that seals a thread needs a name, a label and a local time to open at, and says where its files go", async () => {
-  expect(sealedThreadRequest({ name: " gift ", label: " Something for you ", sealed_until: " 2026-12-24 08:00 " }, "UTC")).toEqual({ id: "gift", label: "Something for you", unsealAt: Date.UTC(2026, 11, 24, 8) });
-  expect(sealedThreadRequest({ name: "gift", label: "A", sealed_until: "2026-12-24T08:00" }, "America/New_York").unsealAt).toBe(Date.UTC(2026, 11, 24, 13));
-  const wrong = async (input: Record<string, unknown>): Promise<string> => await refusal(() => sealedThreadRequest(input, "UTC"));
+  expect(sealedThreadRequest(new Texts(), { name: " gift ", label: " Something for you ", sealed_until: " 2026-12-24 08:00 " }, "UTC")).toEqual({ id: "gift", label: "Something for you", unsealAt: Date.UTC(2026, 11, 24, 8) });
+  expect(sealedThreadRequest(new Texts(), { name: "gift", label: "A", sealed_until: "2026-12-24T08:00" }, "America/New_York").unsealAt).toBe(Date.UTC(2026, 11, 24, 13));
+  const wrong = async (input: Record<string, unknown>): Promise<string> => await refusal(() => sealedThreadRequest(new Texts(), input, "UTC"));
   const name = "name must be letters, digits, dot, dash or underscore, starting with a letter or digit, at most 64 characters";
   expect(await wrong({ label: "A", sealed_until: "2026-12-24 08:00" })).toContain(name);
   expect(await wrong({ name: 5, label: "A", sealed_until: "2026-12-24 08:00" })).toContain(name);
@@ -141,7 +141,7 @@ test("the tool that seals a thread needs a name, a label and a local time to ope
 
   const asked: unknown[] = [];
   const input = { name: "gift", label: "Something for you", sealed_until: "2026-12-24 08:00" };
-  expect(await handleStartSealedThread(input, async (wanted) => {
+  expect(await handleStartSealedThread(new Texts(), input, async (wanted) => {
     asked.push(wanted);
     return { unsealAt: new Date(wanted.unsealAt).toISOString(), filesDir: "/home/ada/sealed/gift" };
   }, "eve", "UTC")).toBe(
@@ -149,9 +149,9 @@ test("the tool that seals a thread needs a name, a label and a local time to ope
     "`wake_in_thread` takes you into it. Keep what you make for it in /home/ada/sealed/gift, which is outside your workspace.",
   );
   expect(asked).toEqual([{ id: "gift", label: "Something for you", unsealAt: Date.UTC(2026, 11, 24, 8) }]);
-  expect(await refusal(handleStartSealedThread(input, undefined, "eve", "UTC"))).toContain("sealed threads can't be started from here");
-  expect(await refusal(handleStartSealedThread(input, async () => { throw new ThreadError("exists", "thread \"gift\" already exists for ada"); }, "eve", "UTC"))).toBe('io: thread "gift" already exists for ada');
-  expect(await refusal(handleStartSealedThread(input, async () => { throw new Error("the disk is full"); }, "eve", "UTC"))).toBe("the disk is full");
+  expect(await refusal(handleStartSealedThread(new Texts(), input, undefined, "eve", "UTC"))).toContain("sealed threads can't be started from here");
+  expect(await refusal(handleStartSealedThread(new Texts(), input, async () => { throw new ThreadError("exists", "thread \"gift\" already exists for ada"); }, "eve", "UTC"))).toBe('io: thread "gift" already exists for ada');
+  expect(await refusal(handleStartSealedThread(new Texts(), input, async () => { throw new Error("the disk is full"); }, "eve", "UTC"))).toBe("the disk is full");
 });
 
 test("from inside a sealed thread the list of threads says where the character is, and marks no other thread as that place", async () => {

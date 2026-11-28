@@ -3,6 +3,7 @@ import { extname, join } from "node:path";
 import { openRegularFile } from "./file_access.ts";
 import { IMAGE_EXTENSIONS } from "./read_image.ts";
 import { VIDEO_EXTENSIONS } from "./video.ts";
+import type { Texts } from "../texts/texts.ts";
 
 interface NamedFile {
   path: string;
@@ -42,12 +43,12 @@ const isVideo = (file: string) => VIDEO_EXTENSIONS.has(extname(file).toLowerCase
 
 export interface Embeddable {
   shows: (file: string) => boolean;
-  noun: string;
+  kind: "names_picture" | "names_picture_or_video";
 }
 
-const PICTURES: Embeddable = { shows: isPicture, noun: "a picture" };
+const PICTURES: Embeddable = { shows: isPicture, kind: "names_picture" };
 
-export const PICTURES_AND_VIDEOS: Embeddable = { shows: (file) => isPicture(file) || isVideo(file), noun: "a picture or video" };
+export const PICTURES_AND_VIDEOS: Embeddable = { shows: (file) => isPicture(file) || isVideo(file), kind: "names_picture_or_video" };
 
 const isNote = (file: string) => file.endsWith(".md");
 
@@ -183,49 +184,55 @@ async function suggestions(names: WorkspaceNames, links: readonly Link[], embed:
   return await Promise.all(close.map(({ file, folder }) => linkTo(names, file, folder, embed !== undefined)));
 }
 
-async function lookUp(names: WorkspaceNames, links: readonly Link[], embed: Embeddable | undefined, maxListed: number): Promise<{ file: NamedFile; link: Link }> {
+async function lookUp(texts: Texts, names: WorkspaceNames, links: readonly Link[], embed: Embeddable | undefined, maxListed: number): Promise<{ file: NamedFile; link: Link }> {
   for (const link of links) {
     const found = await fitting(names, link);
-    const [only] = found;
-    if (only !== undefined && found.length === 1) return { file: only, link };
-    if (found.length > 1) {
-      const shown = await Promise.all(found.slice(0, maxListed).map((file) => linkTo(names, file, link.folder, embed !== undefined)));
-      const more = found.length > shown.length ? ` and ${String(found.length - shown.length)} more` : "";
-      throw new Error(`${String(found.length)} ${link.folder ? "folders" : "files"} match: ${shown.join(", ")}${more}`);
-    }
+    const [only, ...others] = found;
+    if (only === undefined) continue;
+    if (others.length === 0) return { file: only, link };
+    const shown = await Promise.all(found.slice(0, maxListed).map((file) => linkTo(names, file, link.folder, embed !== undefined)));
+    const more = found.length > shown.length ? String(found.length - shown.length) : undefined;
+    throw new Error(texts.always("names_many", { count: String(found.length), folders: link.folder ? "yes" : undefined, shown: shown.join(", "), more }));
   }
-  const missed = `no ${links.map((link) => link.folder ? "folder" : "file").join(" or ")} matches`;
   const close = await suggestions(names, links, embed);
-  throw new Error(close.length > 0 ? `${missed}; did you mean ${close.join(", ")}?` : missed);
+  throw new Error(texts.always("names_none", {
+    file: links.some((link) => !link.folder) ? "yes" : undefined,
+    folder: links.some((link) => link.folder) ? "yes" : undefined,
+    close: close.join(", "),
+  }));
 }
 
-async function notShown(names: WorkspaceNames, file: NamedFile, link: Link, embed: Embeddable): Promise<Error> {
-  const kind = link.folder ? `${file.path}/ is a folder, not ${embed.noun}` : `${file.path} is not ${embed.noun}`;
+async function notShown(texts: Texts, names: WorkspaceNames, file: NamedFile, link: Link, embed: Embeddable): Promise<Error> {
   const pictures = (names.byStem.get(link.folder ? file.file : stem(file.file)) ?? []).filter((other) => embed.shows(other.file) && placed(other, link));
   const [only] = pictures;
-  return new Error(only !== undefined && pictures.length === 1 ? `${kind}; did you mean ${await linkTo(names, only, false, true)}?` : kind);
+  return new Error(texts.always("names_not_shown", {
+    folder: link.folder ? "yes" : undefined,
+    path: file.path,
+    kind: texts.always(embed.kind),
+    suggestion: only !== undefined && pictures.length === 1 ? await linkTo(names, only, false, true) : undefined,
+  }));
 }
 
-export async function embeddedPicture(names: WorkspaceNames, text: string, maxListed: number, embed: Embeddable = PICTURES): Promise<string | undefined> {
+export async function embeddedPicture(texts: Texts, names: WorkspaceNames, text: string, maxListed: number, embed: Embeddable = PICTURES): Promise<string | undefined> {
   const link = parseLink(text);
   if (link === undefined) return undefined;
-  const { file } = await lookUp(names, [link], embed, maxListed);
-  if (link.folder || !embed.shows(file.file)) throw await notShown(names, file, link, embed);
+  const { file } = await lookUp(texts, names, [link], embed, maxListed);
+  if (link.folder || !embed.shows(file.file)) throw await notShown(texts, names, file, link, embed);
   return join(names.root, file.path);
 }
 
-export async function linkedFile(names: WorkspaceNames, embed: boolean, text: string): Promise<string> {
+export async function linkedFile(texts: Texts, names: WorkspaceNames, embed: boolean, text: string): Promise<string> {
   const link = parseLink(text);
-  if (link === undefined) throw new Error("the link names no file");
-  return join(names.root, (await lookUp(names, [link], embed ? PICTURES : undefined, Number.POSITIVE_INFINITY)).file.path);
+  if (link === undefined) throw new Error(texts.always("names_no_file"));
+  return join(names.root, (await lookUp(texts, names, [link], embed ? PICTURES : undefined, Number.POSITIVE_INFINITY)).file.path);
 }
 
-export async function namedFile(names: WorkspaceNames, parts: readonly string[], findFolders = true): Promise<Found> {
+export async function namedFile(texts: Texts, names: WorkspaceNames, parts: readonly string[], findFolders: boolean): Promise<Found> {
   const link: Link = { anchored: false, folder: false, folders: parts.slice(0, -1), name: parts.at(-1) ?? "" };
   try {
-    const found = await lookUp(names, findFolders ? [link, { ...link, folder: true }] : [link], undefined, Number.POSITIVE_INFINITY);
+    const found = await lookUp(texts, names, findFolders ? [link, { ...link, folder: true }] : [link], undefined, Number.POSITIVE_INFINITY);
     return { path: join(names.root, found.file.path), link: await linkTo(names, found.file, found.link.folder, false) };
   } catch (error) {
-    throw new Error(`tried as ${render(link, false)}: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(texts.always("names_tried_as", { link: render(link, false), error: error instanceof Error ? error.message : String(error) }));
   }
 }

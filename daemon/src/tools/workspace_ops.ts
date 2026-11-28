@@ -3,6 +3,7 @@ import { access, mkdir, readdir, readFile, realpath, rm, rmdir, writeFile } from
 import { dirname, join } from "node:path";
 
 import type { ImagesConfig } from "../config/app.ts";
+import { Texts, type TextOverrides } from "../texts/texts.ts";
 import { handleEdit } from "./edit.ts";
 import { InvalidArgs, NotImplemented, ToolIoError } from "./errors.ts";
 import { carryToolMedia, toolMediaOf, type ToolResultPayload } from "./media.ts";
@@ -17,11 +18,11 @@ export type FileRead = { data: string } | { error: { code?: string; message: str
 export type EncodedToolValue = { value: unknown } | { media: ToolResultPayload };
 
 export interface WorkspaceOpTable {
-  read: (args: { input: Record<string, unknown>; workspaceDir: string; maxChars?: number; maxImageBytes?: number; images?: ImagesConfig }, signal?: AbortSignal) => Promise<EncodedToolValue>;
-  edit: (args: { input: Record<string, unknown>; workspaceDir: string }, signal?: AbortSignal) => Promise<string>;
-  pictures: (args: { workspaceDir: string; targets: PictureTarget[] }, signal?: AbortSignal) => Promise<PictureLookup[]>;
+  read: (args: { input: Record<string, unknown>; workspaceDir: string; texts: TextOverrides; maxChars?: number; maxImageBytes?: number; images?: ImagesConfig }, signal?: AbortSignal) => Promise<EncodedToolValue>;
+  edit: (args: { input: Record<string, unknown>; workspaceDir: string; texts: TextOverrides }, signal?: AbortSignal) => Promise<string>;
+  pictures: (args: { workspaceDir: string; targets: PictureTarget[]; texts: TextOverrides }, signal?: AbortSignal) => Promise<PictureLookup[]>;
   firstFrame: (args: { path: string }, signal?: AbortSignal) => Promise<string | null>;
-  locateFiles: (args: { workspaceDir: string; files: string[] }, signal?: AbortSignal) => Promise<{ paths: string[]; problems: string[] }>;
+  locateFiles: (args: { workspaceDir: string; files: string[]; texts: TextOverrides }, signal?: AbortSignal) => Promise<{ paths: string[]; problems: string[] }>;
   listFiles: (args: { workspaceDir: string }, signal?: AbortSignal) => Promise<string[]>;
   readFiles: (args: { paths: string[] }) => Promise<FileRead[]>;
   exists: (args: { paths: string[] }) => Promise<boolean[]>;
@@ -60,12 +61,12 @@ async function pruneEmptyParents(root: string, path: string): Promise<void> {
 }
 
 export const WORKSPACE_OPS: WorkspaceOpTable = {
-  read: async ({ input, workspaceDir, maxChars, maxImageBytes, images }, signal) =>
-    encodeToolValue(await handleRead(input, workspaceDir, signal, maxChars, maxImageBytes, images)),
-  edit: async ({ input, workspaceDir }, signal) => await handleEdit(input, workspaceDir, signal),
+  read: async ({ input, workspaceDir, texts, maxChars, maxImageBytes, images }, signal) =>
+    encodeToolValue(await handleRead(input, workspaceDir, Texts.from(texts), signal, maxChars, maxImageBytes, images)),
+  edit: async ({ input, workspaceDir, texts }, signal) => await handleEdit(Texts.from(texts), input, workspaceDir, signal),
   pictures: async (args, signal) => await lookUpPictures(args, signal),
   firstFrame: async ({ path }, signal) => (await firstVideoFrame(path, signal))?.toString("base64") ?? null,
-  locateFiles: async ({ workspaceDir, files }, signal) => await locateWorkspaceFiles(files, workspaceDir, signal),
+  locateFiles: async ({ workspaceDir, files, texts }, signal) => await locateWorkspaceFiles(Texts.from(texts), files, workspaceDir, signal),
   listFiles: async ({ workspaceDir }, signal) => await listedWorkspaceFiles(workspaceDir, signal),
   readFiles: async ({ paths }) => await Promise.all(paths.map(async (path): Promise<FileRead> => {
     try {

@@ -100,7 +100,7 @@ export async function runSubagent(
   } catch (e) {
     throw new InvalidArgs(`subagent '${name}': ${String(e)}`);
   }
-  if (catalogModel === undefined) throw new InvalidArgs(missingModelMessage(name, charName));
+  if (catalogModel === undefined) throw new InvalidArgs(missingModelMessage(Texts.of(config), name, charName));
 
   const resolved = resolveSubagentModelSettings(config.dirs.data, charName, name, catalogModel);
 
@@ -147,6 +147,7 @@ export async function runSubagent(
     toRequestModel(resolved),
     entry === undefined ? undefined : credentialEntry(entry),
     {
+      texts: Texts.of(config),
       messages: [{ role: "user", content: [{ type: "text", text: query }] }],
       system: [{ text: systemText, label: "system" }],
       tools,

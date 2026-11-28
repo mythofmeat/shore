@@ -45,14 +45,16 @@ describe("runProcess", () => {
     expect((failure as NodeJS.ErrnoException).code).toBe("ENOENT");
   });
 
-  test("output beyond the limit is cut off and marked, on both streams; output exactly at the limit is not", async () => {
+  test("output beyond the limit is cut off, on both streams, and marked with the note it is given; output exactly at the limit is not", async () => {
     const write = (bytes: number): string => `process.stdout.write("x".repeat(${String(bytes)})); process.stderr.write("y".repeat(${String(bytes)}))`;
-    const exact = await runProcess(bun, ["-e", write(OUTPUT_LIMIT_BYTES)], {});
+    const exact = await runProcess(bun, ["-e", write(OUTPUT_LIMIT_BYTES)], { cut: "[cut]" });
     expect(exact.stdout).toBe("x".repeat(OUTPUT_LIMIT_BYTES));
     expect(exact.stderr).toBe("y".repeat(OUTPUT_LIMIT_BYTES));
-    const over = await runProcess(bun, ["-e", write(OUTPUT_LIMIT_BYTES + 1)], {});
-    expect(over.stdout).toBe(`${"x".repeat(OUTPUT_LIMIT_BYTES)}\n[process output truncated]`);
-    expect(over.stderr).toBe(`${"y".repeat(OUTPUT_LIMIT_BYTES)}\n[process output truncated]`);
+    const over = await runProcess(bun, ["-e", write(OUTPUT_LIMIT_BYTES + 1)], { cut: "[cut]" });
+    expect(over.stdout).toBe(`${"x".repeat(OUTPUT_LIMIT_BYTES)}\n[cut]`);
+    expect(over.stderr).toBe(`${"y".repeat(OUTPUT_LIMIT_BYTES)}\n[cut]`);
+    const unmarked = await runProcess(bun, ["-e", write(OUTPUT_LIMIT_BYTES + 1)], {});
+    expect([unmarked.stdout, unmarked.stderr]).toEqual(["x".repeat(OUTPUT_LIMIT_BYTES), "y".repeat(OUTPUT_LIMIT_BYTES)]);
     expect(OUTPUT_LIMIT_BYTES).toBe(1024 * 1024);
   });
 

@@ -107,13 +107,14 @@ export function deferEditTo(
 
 function chatLogOptions(ctx: ToolContext): ChatLogOptions {
   return {
+    texts: ctx.texts,
     character: ctx.characterName,
     dbPath: ctx.historyDbPath,
     dataDir: dirname(ctx.historyDbPath),
-    ...(ctx.thread === undefined ? {} : { thread: ctx.thread }),
-    ...(ctx.fresh === undefined ? {} : { fresh: ctx.fresh }),
-    ...(ctx.historyIndexPath === undefined ? {} : { indexPath: ctx.historyIndexPath }),
-    ...(ctx.userName === undefined ? {} : { userName: ctx.userName }),
+    thread: ctx.thread,
+    fresh: ctx.fresh,
+    indexPath: ctx.historyIndexPath,
+    userName: ctx.userName,
   };
 }
 
@@ -127,7 +128,7 @@ export async function dispatchTool(
   ctx: ToolContext,
 ): Promise<unknown> {
   if (ctx.dryRun && (["bash", "edit", "apply_patch", "wake_in_thread"].includes(name) || name.startsWith("mcp__"))) {
-    throw new ToolIoError(`${name} blocked: dry-run tools cannot change files or external state`);
+    throw new ToolIoError(ctx.texts.always("tool_dry_run", { tool: name }));
   }
   const args = (input ?? {}) as ToolInput;
   const workspace = ctx.workspace ?? new CharacterWorkspace(ctx.workspaceDir);
@@ -137,6 +138,7 @@ export async function dispatchTool(
       return decodeToolValue(await workspace.call("read", {
         input: args,
         workspaceDir: ctx.workspaceDir,
+        texts: ctx.texts.overrides(),
         ...(ctx.maxResultChars === undefined ? {} : { maxChars: ctx.maxResultChars }),
         ...(ctx.maxInlineImageBytes === undefined ? {} : { maxImageBytes: ctx.maxInlineImageBytes }),
         ...(ctx.images === undefined ? {} : { images: ctx.images }),
@@ -144,18 +146,18 @@ export async function dispatchTool(
     case "edit":
     case "apply_patch": {
       const write = () => withPromptChanges(ctx.texts, workspace,
-        () => name === "edit" ? workspace.call("edit", { input: args, workspaceDir: ctx.workspaceDir }, ctx.signal) : handleApplyPatch(args, workspace, ctx.signal), ctx.deferEdit);
+        () => name === "edit" ? workspace.call("edit", { input: args, workspaceDir: ctx.workspaceDir, texts: ctx.texts.overrides() }, ctx.signal) : handleApplyPatch(args, workspace, ctx.signal), ctx.deferEdit);
       return await (ctx.trackWorkspaceWrite?.(name, input, write) ?? write());
     }
     case "chat_logs":
       return await handleChatLogs(args, ctx.conversationDir, chatLogOptions(ctx));
 
     case "model_history":
-      return await handleModelHistory(args, ctx.characterName, ctx.modelHistoryQuery);
+      return await handleModelHistory(ctx.texts, args, ctx.characterName, ctx.modelHistoryQuery);
 
     case "activity_heatmap":
       if (ctx.activityStats === undefined) {
-        throw new ToolIoError("activity history is not available in this context");
+        throw new ToolIoError(ctx.texts.always("activity_unavailable"));
       }
       return handleActivityHeatmap(args, ctx.activityStats);
 
@@ -182,31 +184,28 @@ export async function dispatchTool(
       });
 
     case "list_triggers":
-      return handleListTriggers(ctx.triggers?.(), ctx.userName ?? "the user");
+      return handleListTriggers(ctx.texts, ctx.triggers?.(), ctx.userName ?? "the user");
 
     case "wake_in_thread": {
       const handOff = ctx.wakeInThread;
       const reach = await reachableThreads(dirname(ctx.historyDbPath), ctx.characterName);
-      return handleWakeInThread(args, ctx.thread, {
+      return handleWakeInThread(ctx.texts, args, ctx.thread, {
         handOff: handOff === undefined ? undefined : (request): WakeHandOff => [...reach.open, ...reach.sealed].includes(request.thread) ? handOff(request) : { kind: "no_thread" },
         callOff: ctx.callOffWake,
       }, ctx.userName ?? "the user");
     }
 
     case "send_message":
-      return await handleSendMessage(args, ctx.sendMessage);
+      return await handleSendMessage(ctx.texts, args, ctx.sendMessage);
 
     case "guide":
-      if (ctx.guide === undefined) throw new ToolIoError("the guide is not available in this context");
+      if (ctx.guide === undefined) throw new ToolIoError(ctx.texts.always("guide_unavailable"));
       return ctx.guide(args);
 
     default: {
       if (name.startsWith("ask_")) {
         const agent = name.slice("ask_".length);
-        const query = args["query"];
-        if (typeof query !== "string") {
-          throw new InvalidArgs(`${name} requires a string \`query\``);
-        }
+        const query = String(args["query"]);
         if (ctx.runSubagent === undefined) throw new NotImplemented(`ask_${agent}`);
         return await ctx.runSubagent(agent, query, ctx.signal, ctx.toolUseId);
       }

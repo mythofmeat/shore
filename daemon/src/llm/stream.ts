@@ -15,6 +15,7 @@ export interface ToolUseEvent {
   name: string;
   input: unknown;
   input_error?: string;
+  input_length?: number;
 }
 
 export interface StreamResult {
@@ -134,8 +135,10 @@ export class StreamAccumulator {
       case "tool_use": {
         this.flushText();
         this.flushThinking();
-        const carried =
-          event.input_error === undefined ? {} : { input_error: event.input_error };
+        const carried = {
+          ...(event.input_error === undefined ? {} : { input_error: event.input_error }),
+          ...(event.input_length === undefined ? {} : { input_length: event.input_length }),
+        };
         this.#contentBlocks.push({
           type: "tool_use",
           id: event.id,
@@ -160,8 +163,6 @@ export class StreamAccumulator {
       }
 
       case "ping":
-        return { kind: "continue" };
-
       case "call_complete":
         return { kind: "continue" };
 

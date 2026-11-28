@@ -8,7 +8,7 @@ use shore_common::protocol::operations::{
     EditMessageArgs, EmptyOperationArgs, ExecuteTool, FavoriteModel, FavoriteModelArgs, GetMessage,
     GetMessageArgs, InjectSystem, InjectSystemArgs, InspectCalls, InspectModel, InspectSegments,
     ListMarks, ListMarksArgs, ListModels, ListModelsArgs, ListProviderModels, ListProviders,
-    ListTexts, MarkArgs, MarkKind, MarkReply, MessageReferences, ModelInfoArgs,
+    ListTexts, MarkArgs, MarkKind, MarkReply, MarkTextsSeen, MessageReferences, ModelInfoArgs,
     ModelPreferenceScope, ModelSettings, ModelSettingsArgs, Operation, PingKeepalive, Presence,
     PresenceArgs, ProviderArgs, ProviderModelsArgs, ReadErrorLog, ReadStatus, ReadSubagentTraces,
     ReadTranscript, ReadWakeLog, RefreshAllProviderModels, RefreshProviderModels, ResetModel,
@@ -2203,11 +2203,17 @@ pub(crate) enum ConfigCommand {
     /// List every text Shore writes for a model: its name, whose wording is
     /// in use, and where it goes. With a name, show that text's wording, the
     /// values it is given, and Shore's own wording when yours replaces it.
-    /// Point a name at a file of your own under [texts] in config.toml.
+    /// A text whose wording an update changed is marked, with the wording
+    /// before, until --seen. Point a name at a file of your own under
+    /// [texts] in config.toml.
     Texts {
         /// The text to show in full
         #[arg(add = values(Completes::Texts))]
         name: Option<String>,
+
+        /// Mark Shore's changed wording as seen
+        #[arg(long)]
+        seen: bool,
 
         /// Output raw JSON
         #[arg(long)]
@@ -2683,6 +2689,10 @@ pub(crate) fn to_swp_command(
             subcommand: Some(ConfigCommand::Tools { .. }),
             ..
         } => operation_to_swp::<ToolAccessListing>(EmptyOperationArgs {}),
+        CliCommand::Config {
+            subcommand: Some(ConfigCommand::Texts { seen: true, .. }),
+            ..
+        } => operation_to_swp::<MarkTextsSeen>(EmptyOperationArgs {}),
         CliCommand::Config {
             subcommand: Some(ConfigCommand::Texts { .. }),
             ..

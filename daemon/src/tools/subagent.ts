@@ -128,12 +128,12 @@ export function renderHistorySlice(
   const lines: string[] = [];
   let previousTimestamp: string | undefined;
   for (const msg of history.slice(start)) {
-    const text = messageDisplayText(msg);
+    const text = messageDisplayText(texts, msg);
     if (text.trim() === "") continue;
     const marker = wallClockMarker(texts, previousTimestamp, msg.timestamp, timeZone);
     if (marker !== undefined) lines.push(marker);
     previousTimestamp = msg.timestamp;
-    lines.push(`${speakerLabel(msg.role, charName, userName)}: ${text}`);
+    lines.push(`${speakerLabel(texts, msg.role, charName, userName)}: ${messageDisplayText(texts, msg)}`);
   }
   return lines.join("\n");
 }
@@ -144,18 +144,18 @@ function parseCount(arg: string): number {
   return Number.isSafeInteger(n) ? n : MAX_HISTORY_MESSAGES;
 }
 
-function speakerLabel(role: Message["role"], charName: string, userName: string): string {
+function speakerLabel(texts: Texts, role: Message["role"], charName: string, userName: string): string {
   switch (role) {
     case "user":
       return userName;
     case "assistant":
       return charName;
     default:
-      return "System";
+      return texts.render("subagent_system") ?? "";
   }
 }
 
-export function messageDisplayText(msg: Message): string {
+export function messageDisplayText(texts: Texts, msg: Message): string {
   let text =
     msg.content.trim() === ""
       ? msg.content_blocks
@@ -164,11 +164,9 @@ export function messageDisplayText(msg: Message): string {
           .join("\n")
       : msg.content;
 
-  const imageCount = msg.images?.length ?? 0;
-  if (imageCount > 0) {
-    const note = `[${imageCount} image(s)]`;
-    text = text.trim() === "" ? note : `${text} ${note}`;
-  }
+  const imageCount = msg.images.length;
+  const note = imageCount > 0 ? texts.render("subagent_images", { count: String(imageCount) }) : undefined;
+  if (note !== undefined) text = text.trim() === "" ? note : `${text} ${note}`;
   return text;
 }
 
@@ -213,13 +211,6 @@ export function subagentToolSubset(
   return defs;
 }
 
-export function missingModelMessage(name: string, character: string | undefined): string {
-  const inherit =
-    character === undefined
-      ? "no character is attached to inherit a chat model from"
-      : `${character} has no chat model to inherit`;
-  return (
-    `subagent '${name}' has no model: subagents.${name}.model and defaults.subagent_model ` +
-    `are unset, and ${inherit}`
-  );
+export function missingModelMessage(texts: Texts, name: string, character: string | undefined): string {
+  return texts.always("subagent_no_model", { name, character });
 }

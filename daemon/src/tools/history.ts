@@ -25,6 +25,7 @@ import {
 import { required } from "../util/required.ts";
 import { actionOf } from "./actions.ts";
 import { InvalidArgs, ToolIoError } from "./errors";
+import type { Texts } from "../texts/texts.ts";
 
 const GAP_MS = 90 * 60_000;
 const DAY_MS = 86_400_000;
@@ -43,10 +44,7 @@ function optionalTrimmedString(
   input: Record<string, unknown>,
   field: string,
 ): string | undefined {
-  if (!(field in input)) return undefined;
-  const value = input[field];
-  if (typeof value !== "string") throw new InvalidArgs(`${field} must be a string`);
-  const trimmed = value.trim();
+  const trimmed = ((input[field] ?? "") as string).trim();
   return trimmed === "" ? undefined : trimmed;
 }
 
@@ -56,15 +54,14 @@ interface TimeBound {
 }
 
 export function parseTimeBound(
+  texts: Texts,
   input: Record<string, unknown>,
   field: string,
 ): TimeBound | undefined {
   const raw = optionalTrimmedString(input, field);
   if (raw === undefined) return undefined;
   const parsed = parseRfc3339Full(raw);
-  if (parsed === undefined) {
-    throw new InvalidArgs(`${field} must be an RFC3339 timestamp: premature end of input`);
-  }
+  if (parsed === undefined) throw new InvalidArgs(texts.always("logs_time_form", { field }));
   return parsed;
 }
 
@@ -98,18 +95,20 @@ function echoFraction(fraction: string | undefined): string {
 }
 
 export interface ChatLogOptions {
+  texts: Texts;
   character: string;
   dbPath: string;
-  dataDir?: string;
-  thread?: string;
-  fresh?: boolean;
-  indexPath?: string;
-  userName?: string;
-  timeZone?: string;
-  now?: () => number;
+  dataDir?: string | undefined;
+  thread?: string | undefined;
+  fresh?: boolean | undefined;
+  indexPath?: string | undefined;
+  userName?: string | undefined;
+  timeZone?: string | undefined;
+  now?: (() => number) | undefined;
 }
 
 interface View {
+  texts: Texts;
   zone: string;
   user: string;
   character: string;
@@ -119,6 +118,7 @@ interface View {
 function viewOf(options: ChatLogOptions): View {
   const user = options.userName ?? "user";
   return {
+    texts: options.texts,
     zone: options.timeZone ?? hostZone(),
     user,
     character: options.character,
@@ -126,8 +126,8 @@ function viewOf(options: ChatLogOptions): View {
   };
 }
 
-function checkConfigured(conversationDir: string): void {
-  if (conversationDir === "") throw new InvalidArgs("conversation history is not configured");
+function checkConfigured(texts: Texts, conversationDir: string): void {
+  if (conversationDir === "") throw new InvalidArgs(texts.always("logs_not_configured"));
 }
 
 async function unseenThreads(options: ChatLogOptions): Promise<LiveThread[]> {
@@ -157,7 +157,7 @@ async function withIndex<T>(conversationDir: string, options: ChatLogOptions, ru
   const refreshed = async (force: boolean): Promise<HistoryIndex> => {
     await withHistoryIndexLock(path, async () => {
       await refreshHistoryIndex(ref, path, force);
-      refreshLiveRows(path, options.thread ?? "main", await unseenThreads(options));
+      refreshLiveRows(path, options.thread ?? "main", await unseenThreads(options), options.texts);
     });
     return HistoryIndex.open(path).keptApart(await wakesThreadOf(options));
   };
@@ -228,21 +228,21 @@ function nextMidnight(year: number, month: number, day: number, zone: string): n
 const LOCAL_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const LOCAL_TIME = /^(\d{4})-(\d{2})-(\d{2})[Tt ](\d{2}):(\d{2})(?::(\d{2}))?$/;
 
-function boundFrom(input: Record<string, unknown>, field: string, zone: string, end: boolean): number | undefined {
+function boundFrom(texts: Texts, input: Record<string, unknown>, field: string, zone: string, end: boolean): number | undefined {
   const raw = optionalTrimmedString(input, field);
   if (raw === undefined) return undefined;
-  const invalid = new InvalidArgs(`${field} must be a date like 2026-03-01, a local time like 2026-03-01T21:30, or an RFC3339 timestamp`);
+  const invalid = new InvalidArgs(texts.always("logs_bound_form", { field }));
   const date = LOCAL_DATE.exec(raw);
   if (date !== null) {
     const parts = date.slice(1).map(Number);
     const start = localInstant(parts, zone);
     if (start === undefined) throw invalid;
-    const [year = 0, month = 1, day = 1] = parts;
+    const [year, month, day] = parts as [number, number, number];
     return end ? nextMidnight(year, month, day, zone) - 1 : start;
   }
   const time = LOCAL_TIME.exec(raw);
   if (time !== null) {
-    const parts = time.slice(1, 7).map((part) => Number(part ?? 0));
+    const parts = time.slice(1).map((part) => Number(part ?? 0));
     const instant = localInstant(parts, zone);
     if (instant === undefined) throw invalid;
     return end ? instant + (time[6] === undefined ? 59_999 : 999) : instant;
@@ -258,23 +258,13 @@ function monthsBefore(now: number, months: number, zone: string): number {
   return resolveInZone(asNaive(back.getTime()), zone);
 }
 
-function orList(values: readonly string[]): string {
-  return values.length <= 1 ? values.join("") : `${values.slice(0, -1).join(", ")} or ${values[values.length - 1] ?? ""}`;
+function chosen<T extends string>(input: Record<string, unknown>, field: string, fallback: T): T {
+  return (input[field] ?? fallback) as T;
 }
 
-function enumArg<T extends string>(input: Record<string, unknown>, field: string, allowed: readonly T[], fallback: T): T {
-  const value = input[field];
-  if (value === undefined) return fallback;
-  if (typeof value === "string" && (allowed as readonly string[]).includes(value)) return value as T;
-  throw new InvalidArgs(`${field} must be ${orList(allowed)}`);
-}
-
-function countArg(input: Record<string, unknown>, field: string, fallback: number, max: number): number {
-  const value = input[field];
-  if (value === undefined) return fallback;
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
-    throw new InvalidArgs(`${field} must be a whole number, 0 or more`);
-  }
+function countArg(texts: Texts, input: Record<string, unknown>, field: string, fallback: number, max: number): number {
+  const value = (input[field] ?? fallback) as number;
+  if (value < 0) throw new InvalidArgs(texts.always("logs_count_form", { field }));
   return Math.min(value, max);
 }
 
@@ -284,19 +274,18 @@ function speakerFrom(input: Record<string, unknown>, view: View): Speaker | unde
   const value = raw.toLowerCase();
   if (value === "user" || value === view.user.toLowerCase()) return "user";
   if (value === "character" || value === view.character.toLowerCase()) return "character";
-  throw new InvalidArgs(`speaker must be ${orList(["user", "character", view.user, view.character])}`);
+  const choices = view.texts.always("logs_or", { list: ["user", "character", view.user].join(", "), last: view.character });
+  throw new InvalidArgs(view.texts.always("logs_speaker_form", { choices }));
 }
 
 function labelOf(speaker: Speaker, view: View): string {
-  return speaker === "user" ? view.user : speaker === "character" ? view.character : "system";
+  return speaker === "user" ? view.user : speaker === "character" ? view.character : view.texts.render("logs_system") ?? "";
 }
 
-function checkThread(index: HistoryIndex, thread: string | undefined): void {
+function checkThread(texts: Texts, index: HistoryIndex, thread: string | undefined): void {
   if (thread === undefined) return;
   const threads = index.threads();
-  if (!threads.includes(thread)) {
-    throw new InvalidArgs(`no thread with messages to read is named ${JSON.stringify(thread)}; threads: ${threads.join(", ") || "none"}`);
-  }
+  if (!threads.includes(thread)) throw new InvalidArgs(texts.always("logs_no_thread", { thread: JSON.stringify(thread), threads: threads.join(", ") }));
 }
 
 function oneLine(text: string): string {
@@ -331,39 +320,38 @@ function archiveSpan(index: HistoryIndex, zone: string): { text: string; message
   return span === undefined ? undefined : { text: `${dayOf(span.oldest, zone)} → ${stamp(span.newest, zone)}`, messages: span.messages };
 }
 
-function emptyArchiveNote(index: HistoryIndex, zone: string): string {
-  const span = archiveSpan(index, zone);
-  return span === undefined
-    ? "There is nothing to read yet; this thread's messages in your context aren't included."
-    : `The chat logs run ${span.text}; this thread's messages in your context aren't included.`;
+function emptyArchiveNote(texts: Texts, index: HistoryIndex, zone: string): string {
+  return texts.render("logs_empty_archive", { span: archiveSpan(index, zone)?.text }) ?? "";
 }
 
 function quoteWords(query: string): string {
   return query.split(/\s+/).filter((word) => word !== "").map((word) => `"${word.replaceAll('"', '""')}"`).join(" ");
 }
 
-function scopeText(view: View, filter: ChatLogFilter, rawStart: string | undefined, rawEnd: string | undefined): string {
-  const parts: string[] = [];
-  if (filter.speaker !== undefined) parts.push(`from ${labelOf(filter.speaker, view)}`);
-  if (filter.thread !== undefined) parts.push(`in thread ${filter.thread}`);
-  if (rawStart !== undefined && rawEnd !== undefined) parts.push(`between ${rawStart} and ${rawEnd}`);
-  else if (rawStart !== undefined) parts.push(`since ${rawStart}`);
-  else if (rawEnd !== undefined) parts.push(`until ${rawEnd}`);
-  return parts.length === 0 ? "" : ` ${parts.join(" ")}`;
+function scopeText(view: View, filter: ChatLogFilter, rawStart: string | undefined, rawEnd: string | undefined): string | undefined {
+  const parts = [
+    filter.speaker === undefined ? undefined : view.texts.render("logs_scope_speaker", { speaker: labelOf(filter.speaker, view) }),
+    filter.thread === undefined ? undefined : view.texts.render("logs_scope_thread", { thread: filter.thread }),
+    rawStart === undefined && rawEnd === undefined ? undefined : view.texts.render("logs_scope_time", { start: rawStart, end: rawEnd }),
+  ].filter((part) => part !== undefined && part !== "");
+  return parts.length === 0 ? undefined : parts.join(" ");
 }
 
-function sortText(sort: ChatLogSort, match: ChatLogMatch): string {
-  if (sort === "oldest") return "oldest first";
-  return sort === "best" && match === "words" ? "best match first" : "newest first";
+function sortText(view: View, sort: ChatLogSort, match: ChatLogMatch): string | undefined {
+  return view.texts.render("logs_sort", { oldest: sort === "oldest" ? "yes" : undefined, best: sort === "best" && match === "words" ? "yes" : undefined });
 }
 
 function hitLine(hit: ChatLogHit, view: View, query: string): string {
-  const thread = hit.thread === "main" ? "" : `[${hit.thread}] `;
-  const fromWake = hit.wake === 1 ? "(wake) " : "";
-  const snippet = oneLine(hit.snippet ?? substringSnippet(hit.text, query));
   const copies = alsoIn(hit);
-  const also = copies.length === 0 ? "" : ` · also in ${copies.join(", ")}`;
-  return `${stamp(hit.ts, view.zone)}  ${labelOf(hit.speaker, view).padEnd(view.width)}  ${thread}${fromWake}${snippet}  ${hit.msg_id}${also}`;
+  return view.texts.render("logs_hit", {
+    at: stamp(hit.ts, view.zone),
+    speaker: labelOf(hit.speaker, view).padEnd(view.width),
+    thread: hit.thread === "main" ? undefined : hit.thread,
+    wake: hit.wake === 1 ? "yes" : undefined,
+    snippet: oneLine(hit.snippet ?? substringSnippet(hit.text, query)),
+    id: hit.msg_id,
+    also: copies.length === 0 ? undefined : copies.join(", "),
+  }) ?? "";
 }
 
 const CHAT_LOG_TAKES = {
@@ -377,7 +365,7 @@ export async function handleChatLogs(
   conversationDir: string,
   options: ChatLogOptions,
 ): Promise<string> {
-  const action = actionOf(input, CHAT_LOG_TAKES);
+  const action = actionOf(options.texts, input, CHAT_LOG_TAKES);
   if (action === "list") return await handleListChatLogs(input, options);
   return action === "search"
     ? await handleSearchChatLogs(input, conversationDir, options)
@@ -424,28 +412,38 @@ function archivedSpan(conversation: ArchivedConversation, zone: string): string 
   return `${day} ${clockOf(conversation.from, zone)} → ${lastDay === day ? "" : `${lastDay} `}${clockOf(conversation.to, zone)}`;
 }
 
+function nextPage(texts: Texts, offset: number): string[] {
+  const line = texts.render("logs_next_page", { offset: String(offset) });
+  return line === undefined ? [] : [line];
+}
+
 export async function handleListChatLogs(input: Record<string, unknown>, options: ChatLogOptions): Promise<string> {
   const view = viewOf(options);
+  const texts = view.texts;
   const thread = optionalTrimmedString(input, "thread");
-  const limit = Math.max(1, countArg(input, "limit", DEFAULT_LIMIT, MAX_LIMIT));
-  const offset = countArg(input, "offset", 0, Number.MAX_SAFE_INTEGER);
+  const limit = Math.max(1, countArg(texts, input, "limit", DEFAULT_LIMIT, MAX_LIMIT));
+  const offset = countArg(texts, input, "offset", 0, Number.MAX_SAFE_INTEGER);
   const all = await archivedConversations(options, thread);
-  const scope = thread === undefined ? "" : ` in thread ${thread}`;
-  if (all.length === 0) return `No archived conversations${scope}.`;
-  if (offset >= all.length) return `${count(all.length)} archived ${all.length === 1 ? "conversation" : "conversations"}${scope}, so offset ${String(offset)} is past the end.`;
+  if (all.length === 0) return texts.render("logs_list_none", { thread }) ?? "";
+  if (offset >= all.length) return texts.render("logs_list_past_end", { count: count(all.length), one: all.length === 1 ? "yes" : undefined, thread, offset: String(offset) }) ?? "";
   const page = all.slice(offset, offset + limit);
   const lines = [
-    `Archived conversations${scope}: ${count(offset + 1)}–${count(offset + page.length)} of ${count(all.length)}, newest first (${view.zone})`,
+    texts.render("logs_list_header", { thread, from: count(offset + 1), to: count(offset + page.length), count: count(all.length), zone: view.zone }) ?? "",
     "",
-    ...page.map((conversation) =>
-      `${archivedSpan(conversation, view.zone)}  ${conversation.turns === 1 ? "1 turn" : `${String(conversation.turns)} turns`}  ` +
-      `${conversation.thread === "main" ? "" : `[${conversation.thread}] `}${conversation.label ?? "(no label)"}`),
+    ...page.map((conversation) => texts.render("logs_list_entry", {
+      span: archivedSpan(conversation, view.zone),
+      turns: String(conversation.turns),
+      one: conversation.turns === 1 ? "yes" : undefined,
+      thread: conversation.thread === "main" ? undefined : conversation.thread,
+      label: conversation.label,
+      unlabeled: conversation.label === undefined ? "yes" : undefined,
+    }) ?? ""),
   ];
-  if (offset + page.length < all.length) lines.push("", `Next page: offset=${String(offset + page.length)}`);
+  if (offset + page.length < all.length) lines.push("", ...nextPage(texts, offset + page.length));
   return lines.join("\n");
 }
 
-function countMatches(index: HistoryIndex, match: ChatLogMatch, query: string, filter: ChatLogFilter): { expression: string; total: number; note?: string } {
+function countMatches(texts: Texts, index: HistoryIndex, match: ChatLogMatch, query: string, filter: ChatLogFilter): { expression: string; total: number; note?: string | undefined } {
   try {
     return { expression: query, total: index.count(match, query, filter) };
   } catch (error) {
@@ -453,7 +451,7 @@ function countMatches(index: HistoryIndex, match: ChatLogMatch, query: string, f
     return {
       expression,
       total: index.count(match, expression, filter),
-      note: `Not valid FTS5 syntax (${describe(error)}), so each word was searched as written: ${expression}`,
+      note: texts.render("logs_fts_fallback", { error: describe(error), expression }),
     };
   }
 }
@@ -463,19 +461,20 @@ export async function handleSearchChatLogs(
   conversationDir: string,
   options: ChatLogOptions,
 ): Promise<string> {
-  checkConfigured(conversationDir);
+  const texts = options.texts;
+  checkConfigured(texts, conversationDir);
   const query = optionalTrimmedString(input, "query");
-  if (query === undefined) throw new InvalidArgs("query is required");
+  if (query === undefined) throw new InvalidArgs(texts.always("logs_query_required"));
   const view = viewOf(options);
-  const match = enumArg(input, "match", ["words", "substring"] as const, "words");
-  const sort = enumArg(input, "sort", ["best", "oldest", "newest"] as const, "best");
+  const match = chosen<ChatLogMatch>(input, "match", "words");
+  const sort = chosen<ChatLogSort>(input, "sort", "best");
   const speaker = speakerFrom(input, view);
   const thread = optionalTrimmedString(input, "thread");
-  const start = boundFrom(input, "start", view.zone, false);
-  const end = boundFrom(input, "end", view.zone, true);
-  if (start !== undefined && end !== undefined && start > end) throw new InvalidArgs("start must not be after end");
-  const limit = Math.max(1, countArg(input, "limit", DEFAULT_LIMIT, MAX_LIMIT));
-  const offset = countArg(input, "offset", 0, Number.MAX_SAFE_INTEGER);
+  const start = boundFrom(texts, input, "start", view.zone, false);
+  const end = boundFrom(texts, input, "end", view.zone, true);
+  if (start !== undefined && end !== undefined && start > end) throw new InvalidArgs(texts.always("logs_start_after_end"));
+  const limit = Math.max(1, countArg(texts, input, "limit", DEFAULT_LIMIT, MAX_LIMIT));
+  const offset = countArg(texts, input, "offset", 0, Number.MAX_SAFE_INTEGER);
   const windowStart = input["all_time"] === true || start !== undefined || end !== undefined
     ? undefined
     : monthsBefore((options.now ?? Date.now)(), WINDOW_MONTHS, view.zone);
@@ -488,108 +487,116 @@ export async function handleSearchChatLogs(
   const scoped = windowStart === undefined ? filter : { ...filter, start: windowStart };
 
   return await withIndex(conversationDir, options, (index) => {
-    checkThread(index, thread);
-    const { expression, total, note } = countMatches(index, match, query, scoped);
+    checkThread(texts, index, thread);
+    const { expression, total, note } = countMatches(texts, index, match, query, scoped);
     const lines = note === undefined ? [] : [note];
     const older = windowStart === undefined ? 0 : index.count(match, expression, { ...filter, end: windowStart - 1 });
-    const label = match === "substring" ? `${query} (substring)` : query;
-    const scope = scopeText(view, filter, optionalTrimmedString(input, "start"), optionalTrimmedString(input, "end"));
-    const windowed = older > 0 ? ` in the last ${String(WINDOW_MONTHS)} months (${count(older)} older)` : "";
+    const heading = {
+      query,
+      substring: match === "substring" ? "yes" : undefined,
+      scope: scopeText(view, filter, optionalTrimmedString(input, "start"), optionalTrimmedString(input, "end")),
+      older: older > 0 ? count(older) : undefined,
+      months: String(WINDOW_MONTHS),
+    };
     if (total === 0) {
-      lines.push(`${label}: 0 matches${scope}${windowed}.`);
-      if (older === 0) {
-        const span = archiveSpan(index, view.zone);
-        lines.push(span === undefined
-          ? "There is nothing to search yet; this thread's messages in your context aren't searched."
-          : `Searched ${count(span.messages)} messages from every thread, ${span.text}. This thread's messages in your context aren't searched.`);
-        const apart = thread === undefined ? index.apartThread() : undefined;
-        if (apart !== undefined) lines.push(`What you wrote while working in your wakes wasn't searched: for that, try thread=${JSON.stringify(apart)}.`);
-        if (match === "words") lines.push(`For partial words, typos or CJK, try match="substring".`);
-      }
+      const apart = thread === undefined ? index.apartThread() : undefined;
+      const span = archiveSpan(index, view.zone);
+      lines.push(...[
+        texts.render("logs_search_none", heading),
+        older === 0 ? texts.render("logs_nothing_searched", { span: span?.text, messages: span === undefined ? undefined : count(span.messages) }) : undefined,
+        older === 0 && apart !== undefined ? texts.render("logs_try_wakes", { thread: JSON.stringify(apart) }) : undefined,
+        older === 0 && match === "words" ? texts.render("logs_try_substring") : undefined,
+      ].filter((line) => line !== undefined));
       return lines.join("\n");
     }
     const hits = index.search(match, expression, scoped, sort, limit, offset);
-    const shown = hits.length === 0 ? "none on this page" : `showing ${count(offset + 1)}–${count(offset + hits.length)}`;
-    lines.push(`${label}: ${count(total)} ${total === 1 ? "match" : "matches"}${scope}${windowed}, ${shown}, ${sortText(sort, match)}`, "");
+    lines.push(texts.render("logs_search_header", {
+      ...heading,
+      count: count(total),
+      one: total === 1 ? "yes" : undefined,
+      shown: texts.render("logs_shown", { from: hits.length === 0 ? undefined : count(offset + 1), to: count(offset + hits.length) }),
+      sort: sortText(view, sort, match),
+    }) ?? "", "");
     for (const hit of hits) lines.push(hitLine(hit, view, query));
-    if (offset + hits.length < total) lines.push("", `Next page: offset=${String(offset + hits.length)}`);
+    if (offset + hits.length < total) lines.push("", ...nextPage(texts, offset + hits.length));
     return lines.join("\n");
   });
 }
 
 function entryHead(row: ChatLogMessage, view: View, marked: boolean): string {
-  const fromWake = row.wake === 1 ? "  (wake)" : "";
-  return `${marked ? "▶ " : ""}${stamp(row.ts, view.zone)}  ${labelOf(row.speaker, view)}${fromWake}  ${row.msg_id}`;
+  return view.texts.render("logs_entry_head", { marked: marked ? "yes" : undefined, at: stamp(row.ts, view.zone), speaker: labelOf(row.speaker, view), wake: row.wake === 1 ? "yes" : undefined, id: row.msg_id }) ?? "";
 }
 
 function entrySize(row: ChatLogMessage, view: View): number {
-  return entryHead(row, view, false).length + shownText(row).length + 3;
+  return entryHead(row, view, false).length + shownText(row, view.texts).length + 3;
 }
 
-function gapText(ms: number): string {
+function gapText(texts: Texts, ms: number): string | undefined {
   const minutes = Math.round(ms / 60_000);
-  if (minutes >= 2 * 24 * 60) return `${String(Math.round(minutes / (24 * 60)))} days`;
-  if (minutes < 60) return `${String(minutes)} min`;
+  if (minutes >= 2 * 24 * 60) return texts.render("logs_gap_length", { days: String(Math.round(minutes / (24 * 60))) });
   const rest = minutes % 60;
-  return rest === 0 ? `${String(Math.floor(minutes / 60))} h` : `${String(Math.floor(minutes / 60))} h ${String(rest)} min`;
+  return texts.render("logs_gap_length", { hours: String(Math.floor(minutes / 60)), minutes: rest === 0 ? undefined : String(rest) });
 }
 
 function transcript(rows: readonly ChatLogMessage[], view: View, markId?: number): string[] {
   const lines: string[] = [];
   let previous: ChatLogMessage | undefined;
   for (const row of rows) {
-    if (previous !== undefined && row.ts - previous.ts >= GAP_MS) lines.push(`· · · ${gapText(row.ts - previous.ts)} later · · ·`, "");
-    lines.push(entryHead(row, view, row.id === markId), shownText(row), "");
+    const gap = previous !== undefined && row.ts - previous.ts >= GAP_MS ? view.texts.render("logs_gap", { gap: gapText(view.texts, row.ts - previous.ts) }) : undefined;
+    if (gap !== undefined) lines.push(gap, "");
+    lines.push(entryHead(row, view, row.id === markId), shownText(row, view.texts), "");
     previous = row;
   }
   return lines;
 }
 
-function leftOut(earlier: number, later: number): string {
-  const parts = [
-    ...(earlier > 0 ? [`${String(earlier)} earlier`] : []),
-    ...(later > 0 ? [`${String(later)} later`] : []),
-  ];
-  return `${parts.join(" and ")} ${earlier + later === 1 ? "message" : "messages"}`;
-}
-
 function readAround(index: HistoryIndex, view: View, msgId: string, thread: string | undefined, before: number, after: number): string {
-  checkThread(index, thread);
+  const texts = view.texts;
+  checkThread(texts, index, thread);
   const target = index.find(msgId, thread);
-  if (target === undefined) {
-    return `No message has id ${msgId}${thread === undefined ? "" : ` in thread ${thread}`}. This thread's messages in your context aren't included.`;
-  }
-  const earlier = index.neighbors(target, -1, before);
-  const later = index.neighbors(target, 1, after);
+  if (target === undefined) return texts.render("logs_not_found", { id: msgId, thread }) ?? "";
+  const earlier = index.neighbors(target, "earlier", before);
+  const later = index.neighbors(target, "later", after);
   const keptEarlier: ChatLogMessage[] = [];
   const keptLater: ChatLogMessage[] = [];
+  const nearestFirst = Array.from({ length: Math.max(earlier.length, later.length) }, (_, distance) => [
+    { row: earlier[distance], kept: keptEarlier },
+    { row: later[distance], kept: keptLater },
+  ]).flat();
   let used = entrySize(target, view);
-  let full = false;
-  for (let distance = 0; distance < Math.max(earlier.length, later.length) && !full; distance += 1) {
-    for (const [side, kept] of [[earlier, keptEarlier], [later, keptLater]] as const) {
-      const row = side[distance];
-      if (row === undefined || full) continue;
-      const size = entrySize(row, view);
-      if (used + size > BUDGET_CHARS) {
-        full = true;
-        continue;
-      }
-      used += size;
-      kept.push(row);
-    }
+  for (const { row, kept } of nearestFirst) {
+    if (row === undefined) continue;
+    used += entrySize(row, view);
+    if (used > BUDGET_CHARS) break;
+    kept.push(row);
   }
   const copies = alsoIn(target);
   const lines = [
-    `${msgId} in ${target.thread}: ${String(keptEarlier.length)} before, ${String(keptLater.length)} after (${view.zone})`,
-    ...(copies.length === 0 ? [] : [`Also in thread ${copies.join(", ")}.`]),
+    texts.render("logs_around_header", { id: msgId, thread: target.thread, before: String(keptEarlier.length), after: String(keptLater.length), zone: view.zone }),
+    copies.length === 0 ? undefined : texts.render("logs_also_in", { threads: copies.join(", ") }),
     "",
     ...transcript([...keptEarlier.reverse(), target, ...keptLater], view, target.id),
-  ];
+  ].filter((line) => line !== undefined);
   const missing = { earlier: earlier.length - keptEarlier.length, later: later.length - keptLater.length };
-  if (missing.earlier + missing.later > 0) {
-    lines.push(`Stopped at about ${count(BUDGET_CHARS)} characters; ${leftOut(missing.earlier, missing.later)} not shown.`);
-  }
+  const stopped = missing.earlier + missing.later > 0
+    ? texts.render("logs_stopped", { chars: count(BUDGET_CHARS), earlier: missing.earlier > 0 ? String(missing.earlier) : undefined, later: missing.later > 0 ? String(missing.later) : undefined, one: missing.earlier + missing.later === 1 ? "yes" : undefined })
+    : undefined;
+  if (stopped !== undefined) lines.push(stopped);
   return lines.join("\n").trimEnd();
+}
+
+function rowsThatFit(index: HistoryIndex, view: View, range: { thread: string; low: number; high: number; offset: number; total: number }): ChatLogMessage[] {
+  const rows: ChatLogMessage[] = [];
+  let used = 0;
+  for (let page = range.offset; page < range.total; page += RANGE_BATCH) {
+    for (const row of index.range(range.thread, range.low, range.high, page, RANGE_BATCH)) {
+      const size = entrySize(row, view);
+      if (rows.length > 0 && used + size > BUDGET_CHARS) return rows;
+      used += size;
+      rows.push(row);
+    }
+  }
+  return rows;
 }
 
 function readRange(
@@ -601,34 +608,18 @@ function readRange(
 ): string {
   const low = bounds.start ?? Number.MIN_SAFE_INTEGER;
   const high = bounds.end ?? Number.MAX_SAFE_INTEGER;
-  const rangeText = bounds.rawStart !== undefined && bounds.rawEnd !== undefined
-    ? `${bounds.rawStart} → ${bounds.rawEnd}`
-    : bounds.rawStart !== undefined ? `from ${bounds.rawStart}` : `until ${bounds.rawEnd ?? ""}`;
+  const texts = view.texts;
+  const shown = texts.render("logs_range", { start: bounds.rawStart, end: bounds.rawEnd }) ?? "";
   const total = index.countRange(thread, low, high);
-  if (total === 0) return `${thread}, ${rangeText}: no messages. ${emptyArchiveNote(index, view.zone)}`;
-  if (offset >= total) return `${thread}, ${rangeText}: ${count(total)} messages, so offset ${String(offset)} is past the end.`;
-  const rows: ChatLogMessage[] = [];
-  let used = 0;
-  let full = false;
-  for (let page = offset; !full && page < total; page += RANGE_BATCH) {
-    const batch = index.range(thread, low, high, page, RANGE_BATCH);
-    if (batch.length === 0) break;
-    for (const row of batch) {
-      const size = entrySize(row, view);
-      if (rows.length > 0 && used + size > BUDGET_CHARS) {
-        full = true;
-        break;
-      }
-      used += size;
-      rows.push(row);
-    }
-  }
+  if (total === 0) return texts.render("logs_range_none", { thread, range: shown, note: emptyArchiveNote(texts, index, view.zone) }) ?? "";
+  if (offset >= total) return texts.render("logs_range_past_end", { thread, range: shown, count: count(total), offset: String(offset) }) ?? "";
+  const rows = rowsThatFit(index, view, { thread, low, high, offset, total });
   const lines = [
-    `${thread}, ${rangeText}: messages ${count(offset + 1)}–${count(offset + rows.length)} of ${count(total)} (${view.zone})`,
+    texts.render("logs_range_header", { thread, range: shown, from: count(offset + 1), to: count(offset + rows.length), count: count(total), zone: view.zone }) ?? "",
     "",
     ...transcript(rows, view),
   ];
-  if (offset + rows.length < total) lines.push(`Next page: offset=${String(offset + rows.length)}`);
+  if (offset + rows.length < total) lines.push(...nextPage(texts, offset + rows.length));
   return lines.join("\n").trimEnd();
 }
 
@@ -646,12 +637,13 @@ function conversationsOf(rows: readonly ChatLogMessage[]): ChatLogMessage[][] {
 function dayOverview(index: HistoryIndex, view: View, date: string): string {
   const parts = LOCAL_DATE.exec(date)?.slice(1).map(Number);
   const dayStart = parts === undefined ? undefined : localInstant(parts, view.zone);
-  if (parts === undefined || dayStart === undefined) throw new InvalidArgs("overview must be a date like 2026-03-01");
-  const [year = 0, month = 1, day = 1] = parts;
+  const texts = view.texts;
+  if (parts === undefined || dayStart === undefined) throw new InvalidArgs(texts.always("logs_overview_form"));
+  const [year, month, day] = parts as [number, number, number];
   const dayEnd = nextMidnight(year, month, day, view.zone) - 1;
   const inDay = (row: ChatLogMessage) => row.ts >= dayStart && row.ts <= dayEnd;
   const conversations = conversationsOf(index.between(dayStart - DAY_MS, dayEnd + DAY_MS)).filter((c) => c.some(inDay));
-  if (conversations.length === 0) return `${date}: no messages on this day. ${emptyArchiveNote(index, view.zone)}`;
+  if (conversations.length === 0) return texts.render("logs_day_none", { date, note: emptyArchiveNote(texts, index, view.zone) }) ?? "";
   const onDay = conversations.reduce((sum, c) => sum + c.filter(inDay).length, 0);
   const weekday = WEEKDAYS[new Date(Date.UTC(year, month - 1, day)).getUTCDay()] ?? "";
   const rows = conversations.map((c) => {
@@ -660,21 +652,21 @@ function dayOverview(index: HistoryIndex, view: View, date: string): string {
     const at = (row: ChatLogMessage) => dayOf(row.ts, view.zone) === date ? clockOf(row.ts, view.zone) : `${weekdayOf(row.ts, view.zone)} ${clockOf(row.ts, view.zone)}`;
     const opener = c.find((row) => row.speaker === "user");
     const fromWakes = c.filter((row) => row.wake === 1).length;
-    const rest = opener !== undefined
-      ? `first: ${truncate(oneLine(opener.text), FIRST_LINE_CHARS)}`
+    const rest = (opener !== undefined
+      ? texts.render("logs_day_first", { text: truncate(oneLine(opener.text), FIRST_LINE_CHARS) })
       : fromWakes === c.length
-        ? `${fromWakes === 1 ? "1 message" : `${String(fromWakes)} messages`} ${view.character} sent from ${fromWakes === 1 ? "a wake" : "wakes"}, no reply from ${view.user}`
-        : `${String(c.length)} from ${view.character}, none from ${view.user}`;
+        ? texts.render("logs_day_wakes", { count: String(fromWakes), one: fromWakes === 1 ? "yes" : undefined, char: view.character, user: view.user })
+        : texts.render("logs_day_no_reply", { count: String(c.length), char: view.character, user: view.user })) ?? "";
     return {
       range: `${at(first)} → ${at(last)}`,
-      size: c.length === 1 ? "1 msg " : `${String(c.length)} msgs`,
+      size: texts.render("logs_day_size", { count: String(c.length), one: c.length === 1 ? "yes" : undefined }) ?? "",
       rest: `${first.thread === "main" ? "" : `[${first.thread}] `}${rest}`,
     };
   });
   const rangeWidth = Math.max(...rows.map((row) => row.range.length));
   const sizeWidth = Math.max(...rows.map((row) => row.size.length));
   return [
-    `${date} ${weekday}: ${String(conversations.length)} ${conversations.length === 1 ? "conversation" : "conversations"}, ${count(onDay)} messages that day (split at gaps of 90+ min, ${view.zone})`,
+    texts.render("logs_day_header", { date, weekday, count: String(conversations.length), one: conversations.length === 1 ? "yes" : undefined, messages: count(onDay), zone: view.zone }) ?? "",
     "",
     ...rows.map((row) => `${row.range.padEnd(rangeWidth)}  ${row.size.padStart(sizeWidth)}  ${row.rest}`),
   ].join("\n");
@@ -685,26 +677,27 @@ export async function handleReadChatLogs(
   conversationDir: string,
   options: ChatLogOptions,
 ): Promise<string> {
-  checkConfigured(conversationDir);
+  const texts = options.texts;
+  checkConfigured(texts, conversationDir);
   const view = viewOf(options);
   const around = optionalTrimmedString(input, "around");
   const overview = optionalTrimmedString(input, "overview");
-  const start = boundFrom(input, "start", view.zone, false);
-  const end = boundFrom(input, "end", view.zone, true);
+  const start = boundFrom(texts, input, "start", view.zone, false);
+  const end = boundFrom(texts, input, "end", view.zone, true);
   const modes = Number(around !== undefined) + Number(overview !== undefined) + Number(start !== undefined || end !== undefined);
-  if (modes !== 1) throw new InvalidArgs("give exactly one of around, overview, or start and end");
+  if (modes !== 1) throw new InvalidArgs(texts.always("logs_one_mode"));
   const thread = optionalTrimmedString(input, "thread");
   if (around !== undefined) {
-    const before = countArg(input, "before", DEFAULT_CONTEXT, MAX_CONTEXT);
-    const after = countArg(input, "after", DEFAULT_CONTEXT, MAX_CONTEXT);
+    const before = countArg(texts, input, "before", DEFAULT_CONTEXT, MAX_CONTEXT);
+    const after = countArg(texts, input, "after", DEFAULT_CONTEXT, MAX_CONTEXT);
     return await withIndex(conversationDir, options, (index) => readAround(index, view, around, thread, before, after));
   }
   if (overview !== undefined) return await withIndex(conversationDir, options, (index) => dayOverview(index, view, overview));
-  if (start !== undefined && end !== undefined && start > end) throw new InvalidArgs("start must not be after end");
-  const offset = countArg(input, "offset", 0, Number.MAX_SAFE_INTEGER);
+  if (start !== undefined && end !== undefined && start > end) throw new InvalidArgs(texts.always("logs_start_after_end"));
+  const offset = countArg(texts, input, "offset", 0, Number.MAX_SAFE_INTEGER);
   const bounds = { start, end, rawStart: optionalTrimmedString(input, "start"), rawEnd: optionalTrimmedString(input, "end") };
   return await withIndex(conversationDir, options, (index) => {
-    checkThread(index, thread);
+    checkThread(texts, index, thread);
     return readRange(index, view, thread ?? "main", bounds, offset);
   });
 }

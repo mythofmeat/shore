@@ -461,7 +461,7 @@ function trimMessages(
 }
 
 export function unsentNotice(texts: Texts, images: readonly Sent[]): string | undefined {
-  const problems = [...new Set(images.flatMap((image) => typeof image.embed === "string" && typeof image.problem === "string" ? [`${image.embed}: ${image.problem}`] : []))];
+  const problems = [...new Set(images.flatMap((image) => typeof image.embed === "string" && typeof image.problem === "string" ? [texts.always("picture_send_problem", { picture: image.embed, problem: image.problem })] : []))];
   if (problems.length === 0) return undefined;
   return texts.render("pictures_not_sent", { pictures: problems.map((problem) => `- ${problem}`).join("\n") });
 }

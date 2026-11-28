@@ -1,0 +1,2 @@
+Shore will wake you in "{{thread}}" for up to {{limit}}{{#if at}} at {{at}}. If {{user}} has written there in the {{quiet}} before, it waits until they have been quiet there that long. If you are dormant then, or {{user}} has switched your triggers off, it is dropped.{{else}}, once this turn is over and {{user}} has been quiet there for {{quiet}}.{{/if}}{{#if replaced}}
+This takes the place of the wake you had waiting there, {{replaced}}{{/if}}

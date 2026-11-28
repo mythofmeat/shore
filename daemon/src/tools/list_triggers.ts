@@ -5,6 +5,7 @@ import { ConfigDuration } from "../config/duration.ts";
 import { formatWallClock } from "../engine/prompt.ts";
 import { asNaive, hostZone, resolveInZone } from "../ledger/zoned.ts";
 import { ToolIoError } from "./errors.ts";
+import type { Texts } from "../texts/texts.ts";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -17,110 +18,109 @@ function clock(minute: number): string {
 }
 
 export interface TriggerVoice {
-  wakes: string;
+  wakes: (thread: string | undefined) => string;
   neverWakes: string;
   statusChanges: string;
-  quietFor: string;
+  quietFor: (length: string) => string;
   switchedOff: string;
 }
 
-export function characterVoice(userName: string): TriggerVoice {
+export function characterVoice(texts: Texts, userName: string): TriggerVoice {
   return {
-    wakes: "wakes you",
-    neverWakes: "never wakes you",
-    statusChanges: `when ${userName} turns a status on or off`,
-    quietFor: `when ${userName} has been quiet for`,
-    switchedOff: `switched off by ${userName}`,
+    wakes: (thread) => texts.render("triggers_wakes", { thread }) ?? "",
+    neverWakes: texts.render("triggers_never_wakes") ?? "",
+    statusChanges: texts.render("triggers_status_changes", { user: userName }) ?? "",
+    quietFor: (span) => texts.render("triggers_quiet_for", { user: userName, length: span }) ?? "",
+    switchedOff: texts.render("triggers_switched_off", { user: userName }) ?? "",
   };
 }
 
 export function userVoice(character: string): TriggerVoice {
   return {
-    wakes: `wakes ${character}`,
+    wakes: (thread) => thread === undefined ? `wakes ${character}` : `wakes ${character} in "${thread}"`,
     neverWakes: `never wakes ${character}`,
     statusChanges: "when you turn a status on or off",
-    quietFor: "when you have been quiet for",
+    quietFor: (span) => `when you have been quiet for ${span}`,
     switchedOff: "switched off by you",
   };
 }
 
-function whenPhrase(when: TriggerWhen, voice: TriggerVoice, timeZone: string): string {
-  if (when.kind === "every") return `every ${length(when.everyMs)}`;
+function whenPhrase(texts: Texts, when: TriggerWhen, voice: TriggerVoice, timeZone: string): string | undefined {
+  if (when.kind === "every") return texts.render("triggers_every", { length: length(when.everyMs) });
   if (when.kind === "at") {
-    const days = when.weekdays.length === DAYS.length ? "every day" : when.weekdays.map((day) => DAYS[day]).join(", ");
-    return `${days} at ${clock(when.minute)}`;
+    return texts.render("triggers_at", { every_day: when.weekdays.length === DAYS.length ? "yes" : undefined, days: when.weekdays.map((day) => DAYS[day]).join(", "), time: clock(when.minute) });
   }
-  if (when.kind === "once") return `once, ${formatWallClock(resolveInZone(asNaive(when.local), timeZone), timeZone)}`;
-  if (when.kind === "follows") return `after \`${when.trigger}\``;
+  if (when.kind === "once") return texts.render("triggers_once", { at: formatWallClock(resolveInZone(asNaive(when.local), timeZone), timeZone) });
+  if (when.kind === "follows") return texts.render("triggers_follows", { trigger: when.trigger });
   if (when.event === "status_changed") return voice.statusChanges;
-  return `${voice.quietFor} ${length(when.afterMs)}`;
+  return voice.quietFor(length(when.afterMs));
 }
 
-function checkStatus(each: TriggerView, timeZone: string): string[] {
+function checkStatus(texts: Texts, each: TriggerView, timeZone: string): (string | undefined)[] {
   if (each.trigger.check === undefined) return [];
   const at = each.checkedAt === undefined ? undefined : formatWallClock(each.checkedAt, timeZone);
-  if (each.problem !== undefined) return [at === undefined ? `its check is failing: ${each.problem}` : `its check failed when last tried, ${at}: ${each.problem}`];
-  if (at === undefined) return ["its check hasn't run yet"];
-  return each.checkedAt === each.lastFiredAt ? [] : [`last checked ${at}, printed nothing`];
+  if (each.problem !== undefined) return [texts.render("triggers_check_failing", { at, problem: each.problem })];
+  if (at === undefined) return [texts.render("triggers_check_not_run")];
+  return each.checkedAt === each.lastFiredAt ? [] : [texts.render("triggers_checked_quiet", { at })];
 }
 
-export interface DescribedTrigger {
+export type DescribedTrigger = {
   name: string;
   does: string;
   status: string;
+};
+
+function joined(parts: readonly (string | undefined)[], between: string): string {
+  return parts.filter((part) => part !== undefined && part !== "").join(between);
 }
 
-export function describeTrigger(each: TriggerView, voice: TriggerVoice, timeZone: string): DescribedTrigger {
+export function describeTrigger(texts: Texts, each: TriggerView, voice: TriggerVoice, timeZone: string): DescribedTrigger {
   const { trigger } = each;
-  const where = trigger.thread === undefined ? voice.wakes : `${voice.wakes} in "${trigger.thread}"`;
   const parts = [
-    whenPhrase(trigger.when, voice, timeZone),
-    ...(trigger.check === undefined ? [] : [trigger.wakes ? `if \`${trigger.check}\` prints` : `runs \`${trigger.check}\``]),
-    trigger.wakes ? where : voice.neverWakes,
-    ...(trigger.reason === undefined ? [] : [`"${trigger.reason}"`]),
-    ...(trigger.between === undefined ? [] : [`only ${clock(trigger.between.startMinute)}-${clock(trigger.between.endMinute)}`]),
-    ...(trigger.limitMs === undefined ? [] : [`for up to ${length(trigger.limitMs)}`]),
-    ...(trigger.cooldownMs === 0 ? [] : [`at most every ${length(trigger.cooldownMs)}`]),
+    whenPhrase(texts, trigger.when, voice, timeZone),
+    trigger.check === undefined ? undefined : texts.render(trigger.wakes ? "triggers_if_prints" : "triggers_runs", { check: trigger.check }),
+    trigger.wakes ? voice.wakes(trigger.thread) : voice.neverWakes,
+    trigger.reason === undefined ? undefined : texts.render("triggers_reason", { reason: trigger.reason }),
+    trigger.between === undefined ? undefined : texts.render("triggers_between", { from: clock(trigger.between.startMinute), to: clock(trigger.between.endMinute) }),
+    trigger.limitMs === undefined ? undefined : texts.render("triggers_limit", { length: length(trigger.limitMs) }),
+    trigger.cooldownMs === 0 ? undefined : texts.render("triggers_cooldown", { length: length(trigger.cooldownMs) }),
   ];
   const status = [
-    ...(each.nextAt === undefined ? [] : [`next ${formatWallClock(each.nextAt, timeZone)}`]),
-    each.lastFiredAt === undefined ? "never fired" : `fired ${String(each.fired)} ${each.fired === 1 ? "time" : "times"}, last ${formatWallClock(each.lastFiredAt, timeZone)}`,
-    ...(each.off ? [voice.switchedOff] : []),
-    ...checkStatus(each, timeZone),
+    each.nextAt === undefined ? undefined : texts.render("triggers_next", { at: formatWallClock(each.nextAt, timeZone) }),
+    each.lastFiredAt === undefined
+      ? texts.render("triggers_never_fired")
+      : texts.render("triggers_fired", { count: String(each.fired), one: each.fired === 1 ? "yes" : undefined, at: formatWallClock(each.lastFiredAt, timeZone) }),
+    each.off ? voice.switchedOff : undefined,
+    ...checkStatus(texts, each, timeZone),
   ];
-  return { name: trigger.name, does: parts.join(", "), status: status.join(" · ") };
+  return { name: trigger.name, does: joined(parts, ", "), status: joined(status, " · ") };
 }
 
-export interface DescribedAsk {
+export type DescribedAsk = {
   thread: string;
   does: string;
   status: string;
-}
+};
 
-export function describeAsked(firing: TriggerFiring, timeZone: string): DescribedAsk {
+export function describeAsked(texts: Texts, firing: TriggerFiring, timeZone: string): DescribedAsk {
   return {
     thread: firing.thread ?? "",
-    does: `asked for from "${firing.from ?? ""}" at ${formatWallClock(firing.at, timeZone)}: ${firing.reason}`,
-    status: firing.startsAt === undefined ? "starts as soon as it can" : `starts ${formatWallClock(firing.startsAt, timeZone)}`,
+    does: texts.render("wake_asked_for", { from: firing.from ?? "", at: formatWallClock(firing.at, timeZone), reason: firing.reason }) ?? "",
+    status: texts.render("triggers_starts", { at: firing.startsAt === undefined ? undefined : formatWallClock(firing.startsAt, timeZone) }) ?? "",
   };
 }
 
-export async function handleListTriggers(pending: Promise<TriggersView> | undefined, userName: string, timeZone: string = hostZone()): Promise<string> {
+export async function handleListTriggers(texts: Texts, pending: Promise<TriggersView> | undefined, userName: string, timeZone: string = hostZone()): Promise<string> {
   const view = await pending;
-  if (view === undefined) throw new ToolIoError("triggers are not available in this context");
-  const where = `Your triggers, from ${TRIGGERS_FILE} in your workspace root.`;
-  const voice = characterVoice(userName);
-  return [
-    view.enabled ? where : `${where} ${userName} has your triggers switched off, so nothing fires.`,
-    ...(view.triggers.length === 0 && view.problems.length === 0 ? ["You have none there yet, so no trigger wakes you."] : []),
-    ...view.triggers.map((each) => {
-      const { name, does, status } = describeTrigger(each, voice, timeZone);
-      return `${name}: ${does}\n  ${status}`;
+  if (view === undefined) throw new ToolIoError(texts.always("triggers_unavailable"));
+  const voice = characterVoice(texts, userName);
+  return joined([
+    texts.render("triggers_heading", { file: TRIGGERS_FILE, off: view.enabled ? undefined : "yes", user: userName }),
+    view.triggers.length === 0 && view.problems.length === 0 ? texts.render("triggers_none") : undefined,
+    ...view.triggers.map((each) => texts.render("triggers_entry", describeTrigger(texts, each, voice, timeZone))),
+    view.problems.length === 0 ? undefined : texts.render("triggers_problems", { problems: view.problems.map((problem) => `- ${problem}`).join("\n") }),
+    view.asked.length === 0 ? undefined : texts.render("triggers_asked", {
+      asked: joined(view.asked.map((firing) => texts.render("triggers_asked_entry", describeAsked(texts, firing, timeZone))), "\n"),
     }),
-    ...(view.problems.length === 0 ? [] : [`Not running:\n${view.problems.map((problem) => `- ${problem}`).join("\n")}`]),
-    ...(view.asked.length === 0 ? [] : [`Wakes you asked for with \`wake_in_thread\` that haven't started:\n${view.asked.map((firing) => {
-      const { thread, does, status } = describeAsked(firing, timeZone);
-      return `"${thread}": ${does}\n  ${status}`;
-    }).join("\n")}`]),
-  ].join("\n\n");
+  ], "\n\n");
 }

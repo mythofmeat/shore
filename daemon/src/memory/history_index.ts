@@ -8,14 +8,20 @@ import { CharacterHistoryReader, type CharacterHistoryRef } from "../engine/char
 import { deriveContentFromBlocks, isToolResultOnly } from "../engine/message_store.ts";
 import { isAutonomousNote } from "../engine/threads.ts";
 import { pictureText } from "../engine/embeds.ts";
-import { pictureFileLabel } from "../engine/picture_files.ts";
 import type { Message } from "../engine/types.ts";
+import { characterTexts, type Texts } from "../texts/texts.ts";
 import { letOthersRun } from "../util/let_others_run.ts";
 import { versionOf } from "../engine/versions.ts";
 
 export const HISTORY_INDEX_FILE = "chat_logs.db";
 const LEGACY_INDEX_FILE = "history_search.db";
-const SCHEMA_VERSION = "6";
+const SCHEMA_VERSION = "7";
+
+const PICTURE_TEXTS = ["picture", "embed_sent", "embed_not_sent"];
+
+function wordingsDigest(texts: Texts): string {
+  return createHash("sha256").update(JSON.stringify(PICTURE_TEXTS.map((name) => texts.wording(name)))).digest("hex");
+}
 
 const SCHEMA = `
 CREATE TABLE metadata (
@@ -140,39 +146,41 @@ function compareKeys(a: string, b: string): number {
 
 const ATTACHMENT_STAMP = /^\d{8}_\d{6}_/;
 
-function shownPictures(message: Message): { label: string; path: string }[] {
+function shownPictures(message: Message, texts: Texts): { label: string; path: string }[] {
   if (message.role !== "user" || isToolResultOnly(message)) return [];
-  return message.images.flatMap((image) => image.embed !== undefined ? [] : [{
-    label: `[picture: ${image.name ?? basename(image.path).replace(ATTACHMENT_STAMP, "")}]`,
-    path: image.path,
-  }]);
+  return message.images.flatMap((image) => {
+    const label = image.embed === undefined ? texts.render("picture", { path: image.name ?? basename(image.path).replace(ATTACHMENT_STAMP, "") }) : undefined;
+    return label === undefined ? [] : [{ label, path: image.path }];
+  });
 }
 
-function indexed(message: Message): { text: string; pictures: string | null } {
-  const shown = shownPictures(message);
-  const text = pictureText(deriveContentFromBlocks(message.content_blocks, false), message.images);
+function indexed(message: Message, texts: Texts): { text: string; pictures: string | null } {
+  const shown = shownPictures(message, texts);
+  const text = pictureText(deriveContentFromBlocks(message.content_blocks, false), message.images,
+    ({ name, video, sent }) => texts.render(sent ? "embed_sent" : "embed_not_sent", { name, video: video ? "yes" : undefined }) ?? "");
   return {
     text: [...shown.map((picture) => picture.label), ...(text === "" ? [] : [text])].join("\n"),
     pictures: shown.length === 0 ? null : JSON.stringify(shown.map((picture) => picture.path)),
   };
 }
 
-function withPictureFiles(text: string, pictures: string | null): string {
+function withPictureFiles(text: string, pictures: string | null, texts: Texts): string {
   if (pictures === null) return text;
   const lines = text.split("\n");
   for (const [line, path] of (JSON.parse(pictures) as string[]).entries()) {
-    if (path !== "" && existsSync(path)) lines[line] = pictureFileLabel(path);
+    const label = path !== "" && existsSync(path) ? texts.render("picture", { path }) : undefined;
+    if (label !== undefined) lines[line] = label;
   }
   return lines.join("\n");
 }
 
-export function messageText(message: Message): string {
-  const { text, pictures } = indexed(message);
-  return withPictureFiles(text, pictures);
+export function messageText(message: Message, texts: Texts): string {
+  const { text, pictures } = indexed(message, texts);
+  return withPictureFiles(text, pictures, texts);
 }
 
-export function shownText(row: Pick<ChatLogMessage, "text" | "pictures">): string {
-  return withPictureFiles(row.text, row.pictures);
+export function shownText(row: Pick<ChatLogMessage, "text" | "pictures">, texts: Texts): string {
+  return withPictureFiles(row.text, row.pictures, texts);
 }
 
 function messageKey(message: Message, text: string): string {
@@ -180,6 +188,7 @@ function messageKey(message: Message, text: string): string {
 }
 
 async function readCorpus(ref: CharacterHistoryRef): Promise<Item[]> {
+  const texts = characterTexts(ref.character);
   const reader = await CharacterHistoryReader.load(ref);
   try {
     const entries = reader.entries();
@@ -198,7 +207,7 @@ async function readCorpus(ref: CharacterHistoryRef): Promise<Item[]> {
       }
       for (const message of await reader.readSegment(entry.archiveKey, entry.idx)) {
         if (isAutonomousNote(message)) continue;
-        const { text, pictures } = indexed(message);
+        const { text, pictures } = indexed(message, texts);
         if (text === "") continue;
         const key = messageKey(message, text);
         if (seenInThread.has(`${thread}\0${key}`)) continue;
@@ -241,7 +250,7 @@ async function readCorpus(ref: CharacterHistoryRef): Promise<Item[]> {
 async function sourceFingerprint(ref: CharacterHistoryRef): Promise<string> {
   const reader = await CharacterHistoryReader.load(ref);
   try {
-    return `${SCHEMA_VERSION}:${reader.archiveDigest()}`;
+    return `${SCHEMA_VERSION}:${wordingsDigest(characterTexts(ref.character))}:${reader.archiveDigest()}`;
   } finally {
     reader.close();
   }
@@ -327,14 +336,14 @@ export interface LiveThread {
   messages: readonly Message[];
 }
 
-export function liveFingerprint(caller: string, threads: readonly LiveThread[]): string {
-  const hash = createHash("sha256").update(SCHEMA_VERSION).update("\0").update(caller);
+export function liveFingerprint(caller: string, threads: readonly LiveThread[], texts: Texts): string {
+  const hash = createHash("sha256").update(SCHEMA_VERSION).update("\0").update(wordingsDigest(texts)).update("\0").update(caller);
   for (const thread of threads) hash.update(`\0${thread.thread}\0${String(thread.raw.length)}\0`).update(thread.raw);
   return hash.digest("hex");
 }
 
-export function refreshLiveRows(path: string, caller: string, threads: readonly LiveThread[]): boolean {
-  const fingerprint = liveFingerprint(caller, threads);
+export function refreshLiveRows(path: string, caller: string, threads: readonly LiveThread[], texts: Texts): boolean {
+  const fingerprint = liveFingerprint(caller, threads, texts);
   chmodSync(path, 0o600);
   const db = new Database(path, { readwrite: true });
   try {
@@ -347,7 +356,7 @@ export function refreshLiveRows(path: string, caller: string, threads: readonly 
       const seenInThread = new Set<string>();
       for (const row of db.query("SELECT id, thread, key, copy_of FROM messages").all() as { id: number; thread: string; key: string; copy_of: number | null }[]) {
         seenInThread.add(`${row.thread}\0${row.key}`);
-        if (row.copy_of === null && !originals.has(row.key)) originals.set(row.key, row.id);
+        if (row.copy_of === null) originals.set(row.key, row.id);
       }
       const cursors = new Map((db.query("SELECT thread, MAX(seq) AS seq, MAX(run) AS run, MAX(ts) AS ts FROM messages GROUP BY thread").all() as { thread: string; seq: number; run: number; ts: number }[])
         .map((row) => [row.thread, { seq: row.seq, run: row.run, ts: row.ts }]));
@@ -360,7 +369,7 @@ export function refreshLiveRows(path: string, caller: string, threads: readonly 
         const cursor = cursors.get(live.thread) ?? { seq: 0, run: 0, ts: 0 };
         for (const message of live.messages) {
           if (isAutonomousNote(message)) continue;
-          const { text, pictures } = indexed(message);
+          const { text, pictures } = indexed(message, texts);
           if (text === "") continue;
           const key = messageKey(message, text);
           if (seenInThread.has(`${live.thread}\0${key}`)) continue;
@@ -483,9 +492,8 @@ export class HistoryIndex {
     return (row as ChatLogMessage | null) ?? undefined;
   }
 
-  neighbors(row: ChatLogMessage, direction: -1 | 1, limit: number): ChatLogMessage[] {
-    if (limit === 0) return [];
-    const sql = direction < 0
+  neighbors(row: ChatLogMessage, side: "earlier" | "later", limit: number): ChatLogMessage[] {
+    const sql = side === "earlier"
       ? "SELECT * FROM messages WHERE thread = ?1 AND run = ?2 AND seq < ?3 ORDER BY seq DESC LIMIT ?4"
       : "SELECT * FROM messages WHERE thread = ?1 AND run = ?2 AND seq > ?3 ORDER BY seq LIMIT ?4";
     return this.#db.query(sql).all(row.thread, row.run, row.seq, limit) as ChatLogMessage[];
